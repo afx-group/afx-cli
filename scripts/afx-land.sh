@@ -177,7 +177,8 @@ if [ "$CLEANUP" = 1 ]; then
     [ -f "$_G/windows/afx-worktree-remove.ps1" ] && case "$_G" in "$ROOT"/*) _G="";; esac || _G=""
     [ -z "$_G" ] && [ -f "$MAIN_WT/scripts/afx-guard/windows/afx-worktree-remove.ps1" ] && _G="$MAIN_WT/scripts/afx-guard"
     [ -z "$_G" ] && [ -f "$HOME/.afx/afx-guard/windows/afx-worktree-remove.ps1" ] && _G="$HOME/.afx/afx-guard"
-    echo "    $(AFX_GUARD_DIR="${_G:-$_AFX_LAND_DIR}" afx_platform_trash_cmd "$ROOT" "$MAIN_WT")" >&2
+    # The merged tip lets the Windows helper prove the leftover files are already in main (it also derives it from the PR when omitted).
+    echo "    $(AFX_GUARD_DIR="${_G:-$_AFX_LAND_DIR}" afx_platform_trash_cmd "$ROOT" "$MAIN_WT" "$TIP")" >&2
     echo "afx-land: list every leftover folder across all repos (read-only): bash $_AFX_LAND_DIR/afx-worktree-clean.sh --orphans <clones-root>" >&2
     exit 8
   fi

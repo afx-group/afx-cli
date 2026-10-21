@@ -1,7 +1,7 @@
 {
  "name": "afx-cli",
  "tier": "core",
- "version": "0.1.1",
+ "version": "0.1.2",
  "hubSha": "unknown",
  "fileCount": 77,
  "installerFiles": [
@@ -159,8 +159,8 @@
   },
   {
    "path": "afx-land.sh",
-   "bytes": 41641,
-   "sha256": "e88fe53b31946b72dd9fff2574ebc7341851b9fa16b0f09120321ef3f10d5e32"
+   "bytes": 41785,
+   "sha256": "675c1de47a5c69684382004b88df1046a926a1cb909d07d3e020998b1de3eb13"
   },
   {
    "path": "afx-lint-guard-scripts.allow",
@@ -184,8 +184,8 @@
   },
   {
    "path": "afx-machine-conf.sh",
-   "bytes": 4547,
-   "sha256": "7ed80e1b47a24b1dc1dc9c2a85210ca2dc9fd03e912aaac5b586e07e43afdf65"
+   "bytes": 5434,
+   "sha256": "fe1d05fec493fbb7769e07e3b9d953c22e21ff23af2514f3e8b129a3abb9e9cc"
   },
   {
    "path": "afx-mask-secrets.sh",
@@ -199,8 +199,8 @@
   },
   {
    "path": "afx-platform.sh",
-   "bytes": 18079,
-   "sha256": "3f7867df595ca52d66c4a642cbe0b0b2817dda5366a9d973242dc5c706574578"
+   "bytes": 18219,
+   "sha256": "8328dd461c4b00587e8cf0ae8ee453ae2dcec2922fd444395ea90c706a0e3265"
   },
   {
    "path": "afx-pr-ready.sh",
@@ -404,8 +404,8 @@
   },
   {
    "path": "windows/afx-worktree-remove.ps1",
-   "bytes": 10327,
-   "sha256": "4d8bacdd6517cea6531d5f9f82bcbeb9ac583780e06a652b5d98950efbbdac6e"
+   "bytes": 11439,
+   "sha256": "a2dc057a634681a7bdeadf20ce31cb5692ee1689a0f4381fde4919a92dc17b92"
   },
   {
    "path": "windows/afx.cmd",

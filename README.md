@@ -9,7 +9,7 @@ Status: **early release 0.1.x**. Expect rough edges and changes between minor ve
 | Method | Status |
 | --- | --- |
 | `curl` installer (`install.sh`) | available |
-| npm: `npm i -g afx-cli` | planned |
+| npm: `npm i -g afx-cli` (needs Node.js 18+ and bash; on Windows, Git for Windows) | available |
 | Homebrew: `brew install afx-group/afx/afx-cli` | planned |
 | winget | planned |
 

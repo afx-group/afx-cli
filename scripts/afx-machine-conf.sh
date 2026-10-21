@@ -46,6 +46,15 @@ native() { if command -v cygpath >/dev/null 2>&1; then cygpath -w "$1"; else ech
 field() { "$PY" -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); v=d.get("paths",{}).get("hub","") if sys.argv[2]=="hub" else d.get(sys.argv[2],""); print(v.replace("\\","/"))' "$(native "$P")" "$1"; }
 ROOT=$(field root); HUBP=$(field hub)
 [ -n "$ROOT" ] || { echo "paths.$KEY.json has no root" >&2; exit 1; }
+# Flat layouts (the Macs) keep every clone directly under <root>/_clones. The guard's root= is that CLONES folder: it derives the
+# reports folder (dirname(root)/_readiness) and the "one destination" check from its parent, while the registry's root is the parent.
+# Copying the registry value verbatim made both Macs write reports one level too high and could trigger a false FRAGMENTATION alarm.
+# fleet.json says which layout a device has; nested layouts (the Lenovo) keep the registry root as is.
+LAYOUT=""
+if [ -f "$REG/fleet.json" ]; then
+  LAYOUT=$("$PY" -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print(next((x.get("layout","") for x in d.get("devices",[]) if x.get("key")==sys.argv[2]), ""))' "$(native "$REG/fleet.json")" "$KEY" | tr -d '')
+fi
+if [ "$LAYOUT" = "flat-clones" ]; then case "$ROOT" in */_clones) ;; *) ROOT="$ROOT/_clones" ;; esac; fi
 [ -n "$NAME" ] || NAME=$(get machine)
 [ -n "$NAME" ] || NAME="$KEY"
 

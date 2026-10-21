@@ -204,17 +204,18 @@ afx_platform_date_to_epoch() {
 }
 
 afx_platform_trash_cmd() {
-  # afx_platform_trash_cmd <folder> <repo-main-checkout>
+  # afx_platform_trash_cmd <folder> <repo-main-checkout> [merged-tip-commit...]
   # Prints the ONE-LINE command that disposes of a leftover worktree folder that `git worktree remove` could not delete ("Directory not
   # empty", "Permission denied", a pnpm hardlink tree): move it to the Trash (never rm -rf, per the owner rule) then prune git's records.
   # Run it only after confirming the branch tip is on GitHub (afx-land.sh --cleanup already did).
-  local d="$1" r="$2" guard
+  local d="$1" r="$2" guard tips=""
+  [ $# -ge 3 ] && { shift 2; tips="$(printf '%s,' "$@")"; tips="${tips%,}"; }
   guard="${AFX_GUARD_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)}"
   [ -n "$guard" ] || guard="$HOME/.afx/afx-guard"
   case "$(afx_platform_os)" in
     mac) printf "osascript -e 'tell application \"Finder\" to delete POSIX file \"%s\"' && git -C \"%s\" worktree prune\n" "$d" "$r" ;;
     windows) if command -v cygpath >/dev/null 2>&1; then guard="$(cygpath -m "$guard")"; r="$(cygpath -m "$r")"; d="$(cygpath -m "$d")"; fi
-             printf 'powershell -NoProfile -ExecutionPolicy Bypass -File "%s/windows/afx-worktree-remove.ps1" -RepoPath "%s" -WorktreePath "%s"\n' "$guard" "$r" "$d" ;;
+             printf 'powershell -NoProfile -ExecutionPolicy Bypass -File "%s/windows/afx-worktree-remove.ps1" -RepoPath "%s" -WorktreePath "%s"%s\n' "$guard" "$r" "$d" "${tips:+ -TipCommit $tips}" ;;
     *) printf 'gio trash "%s" && git -C "%s" worktree prune\n' "$d" "$r" ;;
   esac
 }

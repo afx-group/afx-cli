@@ -82,6 +82,21 @@ if ($orphan) {
 
   # origin/main, plus every -TipCommit that is really merged into it: a file is safe if it is byte-identical to the content at ANY of them.
   # origin/main keeps moving, so a file that was identical to main when the branch merged can differ from main NOW.
+  # `powershell -File ... -TipCommit a,b` arrives as ONE string "a,b": split it.
+  $TipCommit = @($TipCommit | ForEach-Object { "$_" -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+  # No tip given: derive it. A worktree folder is <topic>-<date> on branch wip/<topic>-<date>, and origin/main holds the merge commit of that
+  # branch's PR ("Merge pull request #N from <org>/wip/<name>"); its second parent is the pushed tip and its first parent is main as it
+  # stood. Those are the commits a leftover folder's files match (origin/main itself has moved on since).
+  if ($TipCommit.Count -eq 0) {
+    $name = Split-Path -Leaf $WorktreePath
+    foreach ($m in @(& git -C $RepoPath log origin/main --merges --format=%H -n 5 --fixed-strings --grep="wip/$name" 2>$null)) {
+      foreach ($suffix in '^2', '^1') {
+        $c = & git -C $RepoPath rev-parse -q --verify "$m$suffix" 2>$null
+        if ($c) { $TipCommit += $c }
+      }
+    }
+    if ($TipCommit.Count -gt 0) { Write-Host "No -TipCommit given: derived $($TipCommit.Count) commit(s) from the merged PR of wip/$name" }
+  }
   $tips = @()
   foreach ($t in @($TipCommit | Where-Object { $_ })) {
     & git -C $RepoPath merge-base --is-ancestor $t origin/main 2>$null
