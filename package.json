@@ -1,6 +1,6 @@
 {
   "name": "afx-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "One front door to set up and govern AI coding agents (Claude Code, Cursor, Codex, Copilot, Replit Agent, Ollama agents) across a team's machines.",
   "bin": { "afx": "bin/afx.js" },
   "files": ["bin", "scripts", "LICENSE", "NOTICE", "README.md"],

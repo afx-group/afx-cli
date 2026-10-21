@@ -1,6 +1,5 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://example.com/schemas/afx.config.schema.json",
   "title": "AFX CLI configuration (~/.afx/afx.config.json)",
   "description": "Every key is optional; an unset key uses the built-in neutral default (no organisation, no hub repo, generic folders). Resolution order: $AFX_CONFIG, then ~/.afx/afx.config.json, then the tenant preset afx-config.afx.json next to the scripts if that private file is present, then the neutral built-ins. Written by `afx init`.",
   "type": "object",

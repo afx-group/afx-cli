@@ -1,6 +1,6 @@
 # NOT SUBMITTED. See AFX.AFXCLI.yaml.tmpl. Replace REPLACE_WITH_ZIP_SHA256 with the checksum of the zip you upload.
 PackageIdentifier: AFX.AFXCLI
-PackageVersion: 0.1.0
+PackageVersion: 0.1.1
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
@@ -11,7 +11,7 @@ Dependencies:
     - PackageIdentifier: Git.Git
 Installers:
   - Architecture: neutral
-    InstallerUrl: https://github.com/afx-group/afx-cli/releases/download/v0.1.0/afx-cli-0.1.0.zip
+    InstallerUrl: https://github.com/afx-group/afx-cli/releases/download/v0.1.1/afx-cli-0.1.1.zip
     InstallerSha256: REPLACE_WITH_ZIP_SHA256
 ManifestType: installer
 ManifestVersion: 1.6.0

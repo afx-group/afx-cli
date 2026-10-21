@@ -15,7 +15,8 @@
 //   node afx-config.mjs init [--org O] [--hub-repo O/R] [--root DIR] [--brand B] [--write] [--force]
 //                                   the engine of `afx init`: prints the config it would write; --write writes it
 // Schema: afx.config.schema.json. The bash fallbacks in afx-config-defaults.sh must equal DEFAULTS (a test checks it).
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, realpathSync } from "node:fs";
+const isMain = () => { try { return !!process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]); } catch { return false; } }; // compare REAL paths: the installer links the folder, and a linked argv[1] never equals the real module path (macOS/Linux)
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -104,7 +105,7 @@ export function format(v) { return Array.isArray(v) ? v.join(" ") : String(v); }
 
 // `afx init`: build a config from flags (or prompts on a terminal), print it, and write it only with --write.
 export function buildInit(flags) {
-  const out = { $schema: "https://example.com/schemas/afx.config.schema.json", version: 1 };
+  const out = { version: 1 };
   if (flags.org) out.org = flags.org;
   if (flags["hub-repo"]) out.hubRepo = flags["hub-repo"];
   else if (flags.org) out.hubRepo = `${flags.org}/afx-hub`;
@@ -148,7 +149,7 @@ async function init(argv, env = process.env, home = userHome(env)) {
   return 0;
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain()) {
   const [cmd, key] = process.argv.slice(2);
   if (cmd === "init") process.exit(await init(process.argv.slice(3)));
   const { config, source, error } = loadConfig();

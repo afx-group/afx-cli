@@ -15,7 +15,8 @@
 // afx-live-load.sh's header for why), so a fleet-wide live view means querying each machine that's currently up,
 // not reading one shared file. Off by default (adds a subprocess call) so plain `afx fleet` stays instant.
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, realpathSync } from "node:fs";
+const isMain = () => { try { return !!process.argv[1] && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]); } catch { return false; } }; // compare REAL paths: the installer links the folder, and a linked argv[1] never equals the real module path (macOS/Linux)
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { join, dirname, basename } from "node:path";
@@ -124,7 +125,7 @@ function human(f) {
   return out.join("\n");
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+if (isMain()) {
   const f = buildFleet({
     confFile: process.env.AFX_MACHINE_CONF || join(homedir(), ".claude/hooks/afx-guard/machine.conf"),
     hub: process.env.AFX_HUB || "",

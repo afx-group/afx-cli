@@ -1,7 +1,7 @@
 {
  "name": "afx-cli",
  "tier": "core",
- "version": "0.1.0",
+ "version": "0.1.1",
  "hubSha": "unknown",
  "fileCount": 77,
  "installerFiles": [
@@ -89,8 +89,8 @@
   },
   {
    "path": "afx-config.mjs",
-   "bytes": 8999,
-   "sha256": "91604f71e0c5f9ebc3093df964aa75a27af46136421b0a040c3f1154d0827490"
+   "bytes": 9179,
+   "sha256": "2b62a9c7dba16bcd7fb6dbf8cce311c5d3b9df1b4e4e709bd944a8d8c8f81d02"
   },
   {
    "path": "afx-digest.mjs",
@@ -109,8 +109,8 @@
   },
   {
    "path": "afx-fleet.mjs",
-   "bytes": 7088,
-   "sha256": "8a2b643af15660f54074af19f107c356d4fa21ed87024e17052f31bb54ecc7d3"
+   "bytes": 7331,
+   "sha256": "f9a322c26856c6724c482184e6c799ae4aa6191b8fa1449e0c44fbc5d0da8afb"
   },
   {
    "path": "afx-fragment-audit.sh",
@@ -289,8 +289,8 @@
   },
   {
    "path": "afx.config.schema.json",
-   "bytes": 2373,
-   "sha256": "a6994a1d9129c0f9f14daeb66b336808087318e22f0154a16464f20dd04b0c38"
+   "bytes": 2310,
+   "sha256": "fb01cc875697670bd0fa1f513bfc2cc4efda4466cdb75e2dfdb510d7f5ea2dc5"
   },
   {
    "path": "agent-rules/afx-agent-rules.default.md",
