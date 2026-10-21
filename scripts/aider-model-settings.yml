@@ -1,0 +1,11 @@
+# Passed to Aider by afx-task.py (--model-settings-file). Without num_ctx Ollama silently truncates the prompt
+# to a tiny default window and the model edits blind (seen in the first real run: "Tokens: 1.0k sent").
+- name: ollama_chat/qwen2.5-coder:32b
+  extra_params:
+    num_ctx: 32768
+- name: ollama_chat/qwen2.5-coder:14b
+  extra_params:
+    num_ctx: 32768
+- name: ollama_chat/qwen2.5-coder:7b
+  extra_params:
+    num_ctx: 32768

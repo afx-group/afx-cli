@@ -1,0 +1,5 @@
+# pnpm-denylist.txt: package versions that must NEVER resolve in a venture lockfile (compromised, yanked, or blocked by the
+# Replit/pnpm package firewall). One `name@version` per line, then a space and a reason. publish-preflight greps pnpm-lock.yaml
+# on the repl for each entry and FAILS on a hit; fix = add an `overrides:` pin in pnpm-workspace.yaml to a safe version, re-lock.
+# Add entries ONLY from a real advisory or firewall block message (cite it). This file ships empty on purpose: no invented entries.
+# format: name@1.2.3 reason (advisory id or the exact firewall message)

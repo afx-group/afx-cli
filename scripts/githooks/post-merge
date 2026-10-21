@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# afx-guard portable git hooks — post-merge.
+# Installed via `core.hooksPath .githooks` (scripts/afx-guard/afx-hooks-install.sh).
+# Fires after `git merge` and `git pull` (pull = fetch + merge), in any tool.
+set -u
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+
+if command -v git-lfs >/dev/null 2>&1 && [ -n "$ROOT" ] && git -C "$ROOT" grep -q "filter=lfs" -- .gitattributes 2>/dev/null; then
+  git lfs post-merge "$@" || true
+fi
+
+[ -n "$ROOT" ] && [ -x "$ROOT/scripts/trunk-sync/sync-check.sh" ] && "$ROOT/scripts/trunk-sync/sync-check.sh"
+exit 0

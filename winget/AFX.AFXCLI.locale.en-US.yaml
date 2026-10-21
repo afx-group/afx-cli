@@ -1,0 +1,18 @@
+# NOT SUBMITTED. See AFX.AFXCLI.yaml.tmpl.
+PackageIdentifier: AFX.AFXCLI
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: AFX Holdings
+PackageName: AFX CLI
+PackageUrl: https://allforxproject.com/products/afx-cli
+License: Apache-2.0
+LicenseUrl: https://github.com/afx-group/afx-cli/blob/main/LICENSE
+ShortDescription: One front door to set up and govern AI coding agents across a team's machines.
+Moniker: afx
+Tags:
+  - ai
+  - agents
+  - cli
+  - git
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

@@ -1,0 +1,177 @@
+#!/bin/bash
+# afx: the short front door to the AFX tools on every machine: Mac, Linux VMs, Replit repls, Windows (Git Bash, or
+# PowerShell/cmd through windows/afx.cmd). It only dispatches; the real work stays in the scripts it names, so
+# behaviour is identical whether you type `afx`, use AFX Desktop (which calls `afx ... --json`), or run the script.
+#
+#   afx                         this device + a numbered menu: type a number, nothing to memorize (summary only when piped)
+#   afx menu                    the same menu, always
+#   afx brief                   brief ANY agent on AFX (Claude Code, Cursor, Codex, Ollama, Replit): paste it or have the
+#                               agent run it first. Install is afx-bootstrap.sh; brief is what an agent reads.
+#   afx list                    projects on this machine            (afx-terminal-agent-launcher -List)
+#   afx <key> [opts]            start a session for a project       (afx-terminal-agent-launcher <key>; also `afx start <key>`)
+#   afx root                    a session with no focus project
+#   afx where [path]            is this folder an approved place?   (afx-where-am-i.sh)
+#   afx fleet [--json]          this device + the fleet + MCPs      (afx-fleet.mjs; AFX Desktop reads --json)
+#   afx gate <venture> <branch> '<cmds>'   run gates on that venture's Replit VM, not this machine (afx-remote-gate.sh)
+#   afx land [opts]             land the current worktree's branch  (afx-land.sh)
+#   afx propagate rules [--apply]   push the shared rules block to every live repo: one command, a 2-line answer (afx-propagate.sh)
+#   afx init [--org O] [--hub-repo O/R] [--root DIR] [--write]   make this install yours: prints ~/.afx/afx.config.json
+#                               (dry run); --write saves it. Without it AFX's own defaults apply. Schema: afx.config.schema.json
+#   afx install [afx-bootstrap.sh args]   install/update this machine's AFX tooling (re-runs afx-bootstrap.sh; idempotent)
+#   afx desktop                 launch the AFX Desktop app (macOS: /Applications/AFX Desktop.app, override with AFX_DESKTOP_APP; elsewhere: build it, tools/afx-desktop)
+#   afx term [path]             open a new terminal window at a path (default: here); macOS only today
+#   afx help
+#
+# On a Replit repl or a VM with no allforx-projects.json, `afx <key>` / `afx start` starts Claude in $HOME with
+# ~/workspace named as the focus (the repl's one checkout) instead of failing.
+# Bash 3.2 safe. Installed as ~/.afx/bin/afx by afx-bootstrap.sh; the old launcher names keep working.
+set -u
+SELF="${BASH_SOURCE[0]:-$0}"
+G="${AFX_GUARD_DIR:-$(cd "$(dirname "$SELF")" && pwd)}"
+[ -f "$G/afx-platform.sh" ] || { echo "afx: guard scripts not found in $G (set AFX_GUARD_DIR)" >&2; exit 2; }
+. "$G/afx-platform.sh"
+OS=$(afx_platform_os)
+# Configuration (afx_config_get: $AFX_CONFIG, ~/.afx/afx.config.json, then the tenant preset if present, then the neutral built-ins).
+REGFILE=$(afx_config_get registryFile); REGFILE="${REGFILE/#\~/$HOME}"
+MACROOT=$(afx_config_get clonesRootMac); MACROOT="${MACROOT/#\~/$HOME}"
+PROJROOT=$(dirname "$(dirname "$MACROOT")")   # two levels above the clones root
+
+repl() { [ -n "${REPL_ID:-}" ] || { [ -d "$HOME/workspace/.git" ] && [ ! -d "$HOME/Projects" ] && [ ! -d "$PROJROOT" ]; }; }
+have_registry() { [ -n "${AFX_PROJECTS_JSON:-}" ] || [ -f "$G/allforx-projects.json" ] || [ -f "$HOME/allforx-projects.json" ] || [ -f "$REGFILE" ]; }
+
+repl_launch() {
+  local w="$HOME/workspace"
+  echo "afx: Replit/VM session (no allforx-projects.json). Focus: $w"
+  [ -d "$w/.git" ] && git -C "$w" status -sb 2>/dev/null | head -1
+  case " $* " in *" --no-claude "*) exit 0 ;; esac
+  command -v claude >/dev/null 2>&1 || { echo "afx: claude is not on PATH" >&2; exit 3; }
+  cd "$HOME" || exit 1
+  exec claude --append-system-prompt "AFX session on a Replit repl / VM. Focus project: the checkout at $w (origin $(git -C "$w" remote get-url origin 2>/dev/null || echo unknown)). Follow the repo's rules file. Code reaches GitHub only through a PR; never edit main directly; Publish is the owner's click."
+}
+
+launch() {
+  if ! have_registry && repl; then repl_launch "$@"; fi
+  if [ "$OS" = windows ]; then
+    # The Windows launcher reads allforx-projects.json next to itself; the Lenovo keeps both in ~/Projects.
+    local ps="${AFX_LAUNCHER_PS1:-$HOME/Projects/afx-terminal-agent-launcher.ps1}"
+    [ -f "$ps" ] || ps="$G/windows/afx-terminal-agent-launcher.ps1"
+    local args=(); for a in "$@"; do case "$a" in --list) args+=(-List) ;; --at-project) args+=(-AtProject) ;; --no-claude) args+=(-NoClaude) ;; --no-fetch) args+=(-NoFetch) ;; --here) args+=(-Here) ;; --model=*) args+=(-Model "${a#--model=}") ;; *) args+=("$a") ;; esac; done
+    exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$ps" 2>/dev/null || echo "$ps")" "${args[@]}"
+  fi
+  if [ -n "${AFX_PROJECTS_JSON:-}" ] || [ -f "$G/allforx-projects.json" ] || [ -f "$HOME/allforx-projects.json" ]; then :
+  elif [ -f "$REGFILE" ]; then export AFX_PROJECTS_JSON="$REGFILE"; fi
+  exec bash "$G/afx-terminal-agent-launcher.sh" "$@"
+}
+
+desktop_launch() {
+  if [ "$OS" != mac ]; then echo "afx: 'afx desktop' is macOS-only right now (tools/afx-desktop is a Tauri app; build it for this OS: pnpm tauri:dev, or tauri:build)" >&2; return 3; fi
+  local opencmd="${AFX_OPEN_CMD:-open}" app="${AFX_DESKTOP_APP:-/Applications/AFX Desktop.app}"
+  command -v "$opencmd" >/dev/null 2>&1 || { echo "afx: '$opencmd' not found" >&2; return 2; }
+  [ -d "$app" ] || { echo "afx: AFX Desktop.app is not at $app yet — build/install it first (tools/afx-desktop)" >&2; return 3; }
+  "$opencmd" -a "AFX Desktop"
+}
+
+term_here() {
+  local at="${1:-$PWD}" opencmd="${AFX_OPEN_CMD:-open}"
+  if [ "$OS" != mac ]; then echo "afx: 'afx term' is macOS-only right now (opens Terminal.app at a path)" >&2; return 3; fi
+  command -v "$opencmd" >/dev/null 2>&1 || { echo "afx: '$opencmd' not found" >&2; return 2; }
+  "$opencmd" -a Terminal "$at"
+}
+
+summary() {
+  node "$G/afx-fleet.mjs" | sed -n '1,3p'
+  [ -x "$G/afx-where-am-i.sh" ] && bash "$G/afx-where-am-i.sh" "$PWD" 2>/dev/null | head -2
+  echo
+  echo "next: afx list | afx <key> | afx fleet | afx gate <venture> <branch> '<cmds>' | afx help"
+}
+
+# Numbered menu so nothing has to be memorized. Projects come from this machine's allforx-projects.json (none on a
+# repl: the repl's own ~/workspace is offered instead). AFX_MENU_DRYRUN=1 prints the choice instead of running it.
+registry_file() {
+  local f; for f in "${AFX_PROJECTS_JSON:-}" "$G/allforx-projects.json" "$HOME/allforx-projects.json" "$REGFILE"; do
+    [ -n "$f" ] && [ -f "$f" ] && { echo "$f"; return; }; done
+}
+menu() {
+  summary | sed '$d'
+  local reg keys=() names=() i=0 line choice
+  reg=$(registry_file)
+  if [ -n "$reg" ]; then
+    while IFS=$'\t' read -r k n; do keys+=("$k"); names+=("$n"); done < <(node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).projects||[];for(const x of p) if(!x.paused) console.log(x.key+"\t"+x.name)' "$(cygpath -m "$reg" 2>/dev/null || echo "$reg")")
+  fi
+  echo "Start a session:"
+  for i in "${!keys[@]}"; do printf '  %2d  %s\n' $((i+1)) "${names[$i]}"; done
+  [ ${#keys[@]} -eq 0 ] && echo "   w  this repl/VM's ~/workspace"
+  echo "   r  root session (no focus project)    f  fleet    h  where am I    q  quit"
+  echo "   i  install/update AFX tooling    d  launch AFX Desktop    t  terminal here"
+  printf 'choice: '; read -r choice || choice=q
+  local args=()
+  case "$choice" in
+    q|Q|"") return 0 ;;
+    r|R) args=(root) ;;
+    f|F) exec node "$G/afx-fleet.mjs" ;;
+    h|H) exec bash "$G/afx-where-am-i.sh" "$PWD" ;;
+    w|W) args=(start) ;;
+    i|I) [ "${AFX_MENU_DRYRUN:-0}" = 1 ] && { echo "afx: would run: afx install"; return 0; }; bash "$G/afx-bootstrap.sh"; return $? ;;
+    d|D) [ "${AFX_MENU_DRYRUN:-0}" = 1 ] && { echo "afx: would run: afx desktop"; return 0; }; desktop_launch; return $? ;;
+    t|T) [ "${AFX_MENU_DRYRUN:-0}" = 1 ] && { echo "afx: would run: afx term"; return 0; }; term_here; return $? ;;
+    *[!0-9]*) echo "afx: not a choice: $choice" >&2; return 2 ;;
+    *) [ "$choice" -ge 1 ] && [ "$choice" -le ${#keys[@]} ] || { echo "afx: no project $choice" >&2; return 2; }
+       args=("${keys[$((choice-1))]}") ;;
+  esac
+  [ "${AFX_MENU_DRYRUN:-0}" = 1 ] && { echo "afx: would run: afx ${args[*]}"; return 0; }
+  launch "${args[@]}"
+}
+
+# One briefing for every tool. Claude Code also gets the hook briefing at SessionStart; other tools have only their
+# rules file, so this is what makes them start informed.
+brief() {
+  local top rules f
+  echo "# $(afx_config_get brand) briefing ($(date '+%Y-%m-%d %H:%M'))"
+  echo
+  echo "## This device and the fleet"
+  node "$G/afx-fleet.mjs" | sed -n '1,4p'
+  echo
+  echo "## Where you are"
+  bash "$G/afx-where-am-i.sh" "$PWD" 2>&1 | head -3
+  top=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null)
+  if [ -n "$top" ]; then
+    echo "repo: $(git -C "$top" remote get-url origin 2>/dev/null) on $(git -C "$top" branch --show-current 2>/dev/null)"
+    rules=""; for f in CLAUDE.md AGENTS.md replit.md CONVENTIONS.md; do [ -f "$top/$f" ] && rules="$rules $f"; done
+    [ -n "$rules" ] && echo "read first:$rules (same rules, one per tool)"
+  fi
+  echo
+  echo "## Rules every agent follows"
+  echo "- Edit only in <clone>/.claude/worktrees/<name> on wip/<topic>; never in a canonical clone's working folder."
+  echo "- Uncommitted work you did not make belongs to someone else: never restore, reset, clean or stash it."
+  echo "- Done means merged: land with afx land (afx-land.sh), then remove the worktree. Push within 2h."
+  echo "- pnpm only; no force-push; no direct push to main; real exit codes; no fabricated data."
+  echo "- Heavy builds/tests go to Replit: afx gate <venture> <branch> '<cmds>'. Publish is the owner's click."
+  echo "- A guard block is the rule working: ask the owner (they approve in chat), never route around it."
+  echo
+  echo "## Commands"
+  echo "afx (menu) | afx list | afx <key> | afx where | afx fleet [--json] | afx gate | afx land | afx init | afx install | afx desktop | afx term | afx help"
+  _qd=$(afx_config_get quickstartDoc)
+  if [ -n "$_qd" ]; then echo "Full guide: $_qd"; fi
+}
+
+cmd="${1:-}"; [ $# -gt 0 ] && shift
+case "$cmd" in
+  "") if [ -t 0 ] && [ -t 1 ]; then menu; else summary; fi ;;
+  menu) menu ;;
+  brief|context) brief ;;
+  help|-h|--help) sed -n '2,28p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  list|-List|--list) launch --list ;;
+  start) launch "$@" ;;
+  where) exec bash "$G/afx-where-am-i.sh" "${1:-$PWD}" ;;
+  fleet) exec node "$G/afx-fleet.mjs" "$@" ;;
+  init) exec node "$G/afx-config.mjs" init "$@" ;;
+  gate) [ -f "$G/afx-remote-gate.sh" ] || { echo "afx: 'afx gate' (builds and tests on cloud VMs) is part of AFX CLI Pro and is not in this build." >&2; exit 2; }
+        exec bash "$G/afx-remote-gate.sh" "$@" ;;
+  land) exec bash "$G/afx-land.sh" "$@" ;;
+  propagate) exec bash "$G/afx-propagate.sh" "$@" ;;
+  install|update) exec bash "$G/afx-bootstrap.sh" "$@" ;;
+  desktop) desktop_launch; exit $? ;;
+  term|terminal) term_here "${1:-$PWD}"; exit $? ;;
+  -*) echo "afx: unknown option $cmd (afx help)" >&2; exit 2 ;;
+  *) launch "$cmd" "$@" ;;
+esac

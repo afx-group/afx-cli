@@ -1,0 +1,15 @@
+# Shell and script sources must stay LF on every platform (CRLF breaks `#!/bin/sh` and bash).
+* text=auto
+*.sh text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.rb text eol=lf
+install.sh text eol=lf
+scripts/afx text eol=lf
+scripts/githooks/* text eol=lf
+# Windows launchers want CRLF.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf

@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# afx-guard portable git hooks — pre-commit.
+# Installed via `core.hooksPath .githooks` (scripts/afx-guard/afx-hooks-install.sh).
+# Works identically whether the commit comes from Claude Code, Cursor,
+# Replit's shell, or a bare terminal — it's the repo's own git config doing
+# the enforcing, not any one tool. Same file, byte-for-byte, across the hub,
+# afx-template and every venture repo — a fix here is a fix everywhere once
+# afx-hooks-install.sh is re-run.
+#
+# Skip for a deliberate one-off: AFX_HOOKS_SKIP=1 git commit ...
+set -u
+
+[ "${AFX_HOOKS_SKIP:-0}" = "1" ] && exit 0
+[ "${TRUNK_SYNC_SKIP_GUARD:-0}" = "1" ] && exit 0   # legacy escape hatch name, honored too
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+[ -n "$ROOT" ] || exit 0
+
+# --- L-010 / L-011: never let worktree/build/dependency output land in a commit ---
+# `git add -A`/`.` in a worktree-based repo has swept in a SIBLING worktree's
+# embedded .git dir, a full local Xcode archive/export (.xcarchive, tens of
+# MB), and node_modules before (2026-09-24 — caught one review
+# step before landing on origin/main). This blocks those specific path
+# patterns from ever being committed, regardless of how they got staged, so
+# the mistake can't repeat even on a session that doesn't remember the rule.
+_AFX_BLOCK_RE='(^|/)\.claude/worktrees/|\.xcarchive(/|$)|(^|/)build/|(^|/)ios/Pods/|(^|/)\.gate-scratch[^/]*(/|$)|(^|/)node_modules/'
+STAGED="$(git diff --cached --name-only --diff-filter=ACMR 2>/dev/null)"
+if [ -n "$STAGED" ]; then
+  BLOCKED="$(printf '%s\n' "$STAGED" | grep -E "$_AFX_BLOCK_RE" || true)"
+  if [ -n "$BLOCKED" ]; then
+    echo "" >&2
+    echo "BLOCKED (L-010/L-011): staged path(s) that must never be committed:" >&2
+    printf '%s\n' "$BLOCKED" | sed 's/^/  /' >&2
+    echo "" >&2
+    echo "These are worktree checkouts, build/export output, or dependency trees —" >&2
+    echo "not source. Unstage them: git restore --staged <path>" >&2
+    echo "and make sure .gitignore covers the pattern for this repo." >&2
+    echo "Deliberate, reviewed exception: AFX_HOOKS_SKIP=1 git commit ..." >&2
+    exit 1
+  fi
+  N="$(printf '%s\n' "$STAGED" | grep -c .)"
+  if [ "${N:-0}" -gt 200 ]; then
+    echo "" >&2
+    echo "WARN: this commit stages $N files — unusually large for one commit." >&2
+    echo "  Double-check this wasn't a 'git add -A'/'.' sweep of unrelated worktrees" >&2
+    echo "  or build output (L-011) rather than the change you intended. If it's" >&2
+    echo "  really this big on purpose, carry on — this is a warning, not a block." >&2
+  fi
+fi
+
+# --- Conflict-marker + secret scan on the STAGED bytes (git show ":$f") ---
+# Carried over from a venture's legacy scripts/git-hooks/pre-commit (#77), which
+# core.hooksPath=.githooks bypasses; now every AFX repo gets both trip-wires.
+# The secret scan is a fast check for obvious pasted keys, not a real scanner.
+_AFX_SECRET_RE='-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|AIzaSy[0-9A-Za-z_-]{33}|xox[baprs]-[0-9A-Za-z-]{10,72}|gh[pousr]_[0-9A-Za-z]{36,}|sk-[A-Za-z0-9]{20,}|sk_live_[0-9A-Za-z]{20,}|rk_live_[0-9A-Za-z]{20,}'
+if [ -n "$STAGED" ]; then
+  _CONFLICT=""; _SECRET=""
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case "$f" in *.png|*.jpg|*.jpeg|*.webp|*.gif|*.ico|*.pdf|*.woff|*.woff2|*.ttf|*.otf|*.zip|*.ipa) continue ;; esac
+    _BLOB="$(git show ":$f" 2>/dev/null)" || continue
+    printf '%s\n' "$_BLOB" | grep -qE '^(<<<<<<<|>>>>>>>)( |$)' && _CONFLICT="${_CONFLICT}  $f
+"
+    printf '%s\n' "$_BLOB" | grep -qE -- "$_AFX_SECRET_RE" && _SECRET="${_SECRET}  $f
+"
+  done <<AFXEOF
+$STAGED
+AFXEOF
+  if [ -n "$_CONFLICT" ]; then
+    printf '\nBLOCKED: unresolved merge-conflict marker(s) in staged file(s):\n%s' "$_CONFLICT" >&2
+    echo "Resolve them first. Deliberate exception: AFX_HOOKS_SKIP=1 git commit ..." >&2
+    exit 1
+  fi
+  if [ -n "$_SECRET" ]; then
+    printf '\nBLOCKED: possible secret/credential in staged file(s):\n%s' "$_SECRET" >&2
+    echo "Remove it (rotate it if it was ever pushed). False positive: AFX_HOOKS_SKIP=1 git commit ..." >&2
+    exit 1
+  fi
+fi
+
+# --- afx-guard-lint: only when scripts/afx-guard itself is staged ---
+# (A-XPLAT-12/13: .ps1 BOM lint + awk-print-on-path-output lint, plus the
+# bare-cd lint — see scripts/afx-guard/afx-guard-lint.sh, the single local
+# gate entry point for these checks). Scoped to staged changes under
+# scripts/afx-guard so an unrelated commit elsewhere in a large monorepo
+# never pays for a repo-wide scan.
+if [ -n "$STAGED" ] && printf '%s\n' "$STAGED" | grep -q '^scripts/afx-guard/' \
+   && [ -x "$ROOT/scripts/afx-guard/afx-guard-lint.sh" ]; then
+  if ! "$ROOT/scripts/afx-guard/afx-guard-lint.sh" "$ROOT/scripts/afx-guard"; then
+    echo "" >&2
+    echo "Commit blocked by afx-guard-lint (see above — A-XPLAT-12/13)." >&2
+    echo "Fix the finding, or if it's a deliberate exception:" >&2
+    echo "  AFX_HOOKS_SKIP=1 git commit ..." >&2
+    exit 1
+  fi
+fi
+
+# --- Repo-specific regression guard, if this repo has one ---
+# (trunk-sync-discipline repo-kit; no-ops silently if the repo doesn't use it)
+if [ -f "$ROOT/.claude-regression-guards" ] && [ -x "$ROOT/scripts/trunk-sync/check-regression-guards.sh" ]; then
+  "$ROOT/scripts/trunk-sync/check-regression-guards.sh" "$ROOT"
+  STATUS=$?
+  if [ "$STATUS" -ne 0 ]; then
+    echo "" >&2
+    echo "Commit blocked by .claude-regression-guards (see above)." >&2
+    echo "Fix the pattern, or if this is a false positive / deliberate," >&2
+    echo "re-run with: AFX_HOOKS_SKIP=1 git commit ..." >&2
+    exit "$STATUS"
+  fi
+fi
+
+# --- #10: bundle-safety (BLOCK) + visual-parity (advisory) ---
+# bundle-safety: an import.meta.glob over a .ts/.tsx tree with no test-file
+# exclusion eagerly pulls *.test.tsx into the vendor chunk and blanks the PWA
+# for fresh visitors (HTR outage, 2026-09-29). Scan only the STAGED content
+# (via checkout-index → temp dir) so it's fast and blocks the commit that
+# INTRODUCES the pattern, not a pre-existing one elsewhere in the tree.
+if [ -n "$STAGED" ] && [ -x "$ROOT/scripts/afx-guard/afx-bundle-safety-lint.sh" ] \
+   && printf '%s\n' "$STAGED" | grep -qE '\.(ts|tsx|js|jsx)$'; then
+  _bs_tmp="$(mktemp -d)"
+  printf '%s\n' "$STAGED" | grep -E '\.(ts|tsx|js|jsx)$' \
+    | git checkout-index -f --prefix="$_bs_tmp/" --stdin 2>/dev/null
+  if ! "$ROOT/scripts/afx-guard/afx-bundle-safety-lint.sh" "$_bs_tmp" >&2; then
+    rm -rf "$_bs_tmp"
+    echo "" >&2
+    echo "Commit blocked by afx-bundle-safety-lint: a staged file calls import.meta.glob over" >&2
+    echo "a .ts/.tsx tree without excluding test files — this blanks the PWA at load." >&2
+    echo "Exclude test files from the glob, or: AFX_HOOKS_SKIP=1 git commit ..." >&2
+    exit 1
+  fi
+  rm -rf "$_bs_tmp"
+fi
+
+# visual-parity: ADVISORY at commit only (the HARD gate is at ship time, in
+# afx-visual-parity-lint's ship-gate caller). Warn when a mobile app's source
+# is staged; never block a normal code commit for missing ship artifacts.
+if [ -n "$STAGED" ] && [ -x "$ROOT/scripts/afx-guard/afx-visual-parity-lint.sh" ]; then
+  _vp_app="$(printf '%s\n' "$STAGED" | sed -n 's#^\(artifacts/[^/]*mobile[^/]*\)/.*#\1#p' | head -1)"
+  if [ -n "$_vp_app" ]; then
+    _vp_out="$("$ROOT/scripts/afx-guard/afx-visual-parity-lint.sh" "$ROOT" "$_vp_app" 2>&1)"
+    if [ $? -ne 0 ]; then
+      echo "" >&2
+      echo "VP (advisory, NOT blocking) — visual-parity artifacts incomplete for $_vp_app:" >&2
+      printf '%s\n' "$_vp_out" | sed 's/^/  /' >&2
+      echo "  Hard-enforced at ship, not here. Commit proceeds." >&2
+    fi
+  fi
+fi
+
+# design preflight (R29-R33): ADVISORY only, never blocks. Warns when staged changes add a mobile screen
+# (artifacts/*mobile*/app/**/*.tsx) without touching docs/design/; prints the exact missing items.
+if [ -n "$STAGED" ] && [ -x "$ROOT/scripts/afx-guard/afx-design-preflight.sh" ] \
+   && printf '%s\n' "$STAGED" | grep -qE '^artifacts/[^/]*mobile[^/]*/app/.*\.tsx$'; then
+  _dp_out="$("$ROOT/scripts/afx-guard/afx-design-preflight.sh" "$ROOT" --staged 2>&1)"
+  if printf '%s\n' "$_dp_out" | grep -q '^DP WARN'; then
+    echo "" >&2
+    echo "DESIGN (advisory, NOT blocking) - screens added without a design-doc update:" >&2
+    printf '%s\n' "$_dp_out" | grep -vE '^DP (ok|PASS)' | sed 's/^/  /' >&2
+    echo "  Commit proceeds. Owner rules R29-R33; skill afx-design-process." >&2
+  fi
+fi
+
+# --- always on origin/main (owner rule 2026-10-15): read-only advisory, never blocks, no network. ---
+_AFX_WS="$ROOT/scripts/afx-guard/afx-workspace-status.sh"
+[ -f "$_AFX_WS" ] || _AFX_WS="$HOME/.claude/hooks/afx-guard/afx-workspace-status.sh"
+[ -f "$_AFX_WS" ] && bash "$_AFX_WS" "$ROOT" --hook-line --no-fetch >&2 2>/dev/null || true
+
+exit 0

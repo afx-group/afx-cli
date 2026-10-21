@@ -1,0 +1,34 @@
+{
+  "_comment": "ONE schema, shared by afx-terminal-agent-launcher.ps1 (Windows) and afx-terminal-agent-launcher.sh (Mac/Linux). This file is a schema example; the real, live allforx-projects.json is machine-local and deliberately NOT committed (paths differ per machine and this file is edited directly by the owner — a committed copy would immediately start drifting from the truth). Copy this to allforx-projects.json next to the launcher on each machine and fill in that machine's real paths.",
+  "projects": [
+    {
+      "key": "app",
+      "aliases": ["my-app"],
+      "name": "My App",
+      "path": "/Users/OWNER/afx/clones/my-app",
+      "repo": "my-org/my-app",
+      "defaultBranch": "main",
+      "stagingBranch": "",
+      "paused": false,
+      "support": false,
+      "notes": ""
+    },
+    {
+      "key": "tools",
+      "aliases": ["my-tools"],
+      "name": "My Tools repo",
+      "path": "/Users/OWNER/afx/clones/my-tools",
+      "repo": "my-org/my-tools",
+      "defaultBranch": "main",
+      "stagingBranch": "",
+      "paused": false,
+      "support": true,
+      "notes": "shared tooling repo, not a product"
+    }
+  ],
+  "neverWorkIn": [
+    "/tmp",
+    "C:\\afx",
+    "~/Desktop"
+  ]
+}

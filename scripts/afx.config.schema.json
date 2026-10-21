@@ -1,0 +1,26 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://example.com/schemas/afx.config.schema.json",
+  "title": "AFX CLI configuration (~/.afx/afx.config.json)",
+  "description": "Every key is optional; an unset key uses the built-in neutral default (no organisation, no hub repo, generic folders). Resolution order: $AFX_CONFIG, then ~/.afx/afx.config.json, then the tenant preset afx-config.afx.json next to the scripts if that private file is present, then the neutral built-ins. Written by `afx init`.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "integer", "description": "Config format version (1)." },
+    "org": { "type": "string", "minLength": 1, "default": "", "description": "GitHub organisation (or user) that owns your repos." },
+    "extraOrgs": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Further GitHub owners whose repos count as yours (besides org)." },
+    "hubRepo": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$", "default": "", "description": "owner/repo of the repo that holds the guard scripts; afx-bootstrap.sh fetches from it." },
+    "clonesRootMac": { "type": "string", "minLength": 1, "default": "~/afx/clones", "description": "Where project clones live on macOS. A leading ~ is your home folder." },
+    "clonesRootWindows": { "type": "string", "minLength": 1, "default": "~/afx/clones", "description": "Where project clones live on Windows (Git Bash)." },
+    "registryFile": { "type": "string", "minLength": 1, "default": "~/.afx/allforx-projects.json", "description": "The project registry (key, path, name per project)." },
+    "brand": { "type": "string", "minLength": 1, "default": "AFX CLI", "description": "Name shown in briefings and menus." },
+    "quickstartDoc": { "type": "string", "minLength": 1, "default": "", "description": "Where `afx brief` points agents for the full guide." },
+    "enabledModules": {
+      "default": "all",
+      "description": "Which modules from modules.json are active: \"all\" or a list of module names.",
+      "oneOf": [ { "const": "all" }, { "type": "array", "items": { "type": "string" } } ]
+    },
+    "policyPacks": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Rule packs the policy guard loads." }
+  }
+}

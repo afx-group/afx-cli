@@ -1,0 +1,4 @@
+# afx-lint-guard-scripts.allow: <basename> <RULE[,RULE]>  # reason
+# Only for code that executes on the Linux repl (inside an ssh heredoc), where GNU tools are native.
+afx-remote-gate.sh TIMEOUT,GNU-ONLY  # remote heredoc runs on the Linux repl (timeout/flock/du --exclude); local side uses afx_platform_timeout
+afx-sync.sh TIMEOUT                  # remote `timeout` lines are inside the ssh command string; local side uses afx_platform_timeout

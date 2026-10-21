@@ -1,0 +1,13 @@
+{
+  "name": "afx-cli",
+  "version": "0.1.0",
+  "description": "One front door to set up and govern AI coding agents (Claude Code, Cursor, Codex, Copilot, Replit Agent, Ollama agents) across a team's machines.",
+  "bin": { "afx": "bin/afx.js" },
+  "files": ["bin", "scripts", "LICENSE", "NOTICE", "README.md"],
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "https://github.com/afx-group/afx-cli.git" },
+  "homepage": "https://allforxproject.com/products/afx-cli",
+  "bugs": { "url": "https://github.com/afx-group/afx-cli/issues" },
+  "engines": { "node": ">=18" },
+  "keywords": ["ai", "agents", "claude-code", "cursor", "codex", "copilot", "guardrails", "git", "cli", "governance"]
+}
