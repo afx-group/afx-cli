@@ -1,9 +1,9 @@
-# NOT SUBMITTED. Template for microsoft/winget-pkgs: manifests/a/AFX/AFXCLI/0.1.3/AFX.AFXCLI.yaml
+# NOT SUBMITTED. Template for microsoft/winget-pkgs: manifests/a/AFX/AFXCLI/0.1.4/AFX.AFXCLI.yaml
 # winget cannot install a .tar.gz, so this needs a zip release asset that export-public.mjs does not build yet
 # (see the publish steps in AFX_CLI_PRODUCT_PLAN.md). AFX CLI runs through Git Bash, hence the Git.Git dependency.
 # Unvalidated: run `winget validate` on the rendered manifests before submitting.
 PackageIdentifier: AFX.AFXCLI
-PackageVersion: 0.1.3
+PackageVersion: 0.1.4
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0

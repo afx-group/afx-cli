@@ -52,7 +52,7 @@ done
 
 CONFIG="${AFX_PROJECTS_JSON:-}"
 # afx-projects.json; the pre-0.1.3 name is still read so existing installs keep working.
-for _d in "$DIR" "$HOME"; do for _n in afx-projects.json afx-projects.json; do
+for _d in "$DIR" "$HOME"; do for _n in afx-projects.json allforx-projects.json; do
   [ -z "$CONFIG" ] && [ -f "$_d/$_n" ] && CONFIG="$_d/$_n"
 done; done
 if [ -z "$CONFIG" ] || [ ! -f "$CONFIG" ]; then
