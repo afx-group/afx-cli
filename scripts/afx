@@ -17,12 +17,23 @@
 #   afx propagate rules [--apply]   push the shared rules block to every live repo: one command, a 2-line answer (afx-propagate.sh)
 #   afx init [--org O] [--hub-repo O/R] [--root DIR] [--write]   make this install yours: prints ~/.afx/afx.config.json
 #                               (dry run); --write saves it. Without it AFX's own defaults apply. Schema: afx.config.schema.json
+#   afx init --project [--gate CMD] [--branch B] [--pm P] [--write]   make THIS project's <repo>/afx.config.json: detects the default
+#                               branch, package manager and gate command (dry run; --write saves; commit the file)
+#   afx doctor [--dir D] [--json]   check the setup (node, git, project config, gate, package manager); exit 0 ok, 1 a check failed
+#   afx project get <key> | dump | brief-rules   read the project config (dotted keys, e.g. git.defaultBranch)
+#   afx rules check [--dir D]   FREE verdict only (OK / DRIFT / MISSING per AI tool's rules file); `afx rules render` (PRO) fetches the
+#                               rule text from the vendor's server with your licence and writes it between markers
+#   afx rules sync [--dir D]    PRO: re-render only the rules files that drifted or are missing (one line per file)
+#   afx guard check | install   check (read-only, exit 0 = identical) or install the Claude Code guard hooks
+#   afx mcp [--print-config]    run the local MCP server over stdio, or print the client config (hosted endpoint from your licence)
+#   afx license status | activate <token> | machine | clear | check <feature>   AFX CLI Pro per-seat licence (offline check)
+#   afx design-preflight | status | ship-queue | gate   PRO commands (need a licence)
 #   afx install [afx-bootstrap.sh args]   install/update this machine's AFX tooling (re-runs afx-bootstrap.sh; idempotent)
 #   afx desktop                 launch the AFX Desktop app (macOS: /Applications/AFX Desktop.app, override with AFX_DESKTOP_APP; elsewhere: build it, tools/afx-desktop)
 #   afx term [path]             open a new terminal window at a path (default: here); macOS only today
 #   afx help
 #
-# On a Replit repl or a VM with no allforx-projects.json, `afx <key>` / `afx start` starts Claude in $HOME with
+# On a Replit repl or a VM with no afx-projects.json, `afx <key>` / `afx start` starts Claude in $HOME with
 # ~/workspace named as the focus (the repl's one checkout) instead of failing.
 # Bash 3.2 safe. Installed as ~/.afx/bin/afx by afx-bootstrap.sh; the old launcher names keep working.
 set -u
@@ -37,11 +48,13 @@ MACROOT=$(afx_config_get clonesRootMac); MACROOT="${MACROOT/#\~/$HOME}"
 PROJROOT=$(dirname "$(dirname "$MACROOT")")   # two levels above the clones root
 
 repl() { [ -n "${REPL_ID:-}" ] || { [ -d "$HOME/workspace/.git" ] && [ ! -d "$HOME/Projects" ] && [ ! -d "$PROJROOT" ]; }; }
-have_registry() { [ -n "${AFX_PROJECTS_JSON:-}" ] || [ -f "$G/allforx-projects.json" ] || [ -f "$HOME/allforx-projects.json" ] || [ -f "$REGFILE" ]; }
+# The registry is afx-projects.json; the pre-0.1.3 name is still read so existing installs keep working.
+reg_in() { local n; for n in afx-projects.json allforx-projects.json; do [ -f "$1/$n" ] && { echo "$1/$n"; return 0; }; done; return 1; }
+have_registry() { [ -n "${AFX_PROJECTS_JSON:-}" ] || reg_in "$G" >/dev/null || reg_in "$HOME" >/dev/null || [ -f "$REGFILE" ]; }
 
 repl_launch() {
   local w="$HOME/workspace"
-  echo "afx: Replit/VM session (no allforx-projects.json). Focus: $w"
+  echo "afx: Replit/VM session (no afx-projects.json). Focus: $w"
   [ -d "$w/.git" ] && git -C "$w" status -sb 2>/dev/null | head -1
   case " $* " in *" --no-claude "*) exit 0 ;; esac
   command -v claude >/dev/null 2>&1 || { echo "afx: claude is not on PATH" >&2; exit 3; }
@@ -52,13 +65,13 @@ repl_launch() {
 launch() {
   if ! have_registry && repl; then repl_launch "$@"; fi
   if [ "$OS" = windows ]; then
-    # The Windows launcher reads allforx-projects.json next to itself; the Lenovo keeps both in ~/Projects.
+    # The Windows launcher reads afx-projects.json next to itself; the Lenovo keeps both in ~/Projects.
     local ps="${AFX_LAUNCHER_PS1:-$HOME/Projects/afx-terminal-agent-launcher.ps1}"
     [ -f "$ps" ] || ps="$G/windows/afx-terminal-agent-launcher.ps1"
     local args=(); for a in "$@"; do case "$a" in --list) args+=(-List) ;; --at-project) args+=(-AtProject) ;; --no-claude) args+=(-NoClaude) ;; --no-fetch) args+=(-NoFetch) ;; --here) args+=(-Here) ;; --model=*) args+=(-Model "${a#--model=}") ;; *) args+=("$a") ;; esac; done
     exec powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$(cygpath -w "$ps" 2>/dev/null || echo "$ps")" "${args[@]}"
   fi
-  if [ -n "${AFX_PROJECTS_JSON:-}" ] || [ -f "$G/allforx-projects.json" ] || [ -f "$HOME/allforx-projects.json" ]; then :
+  if [ -n "${AFX_PROJECTS_JSON:-}" ] || reg_in "$G" >/dev/null || reg_in "$HOME" >/dev/null; then :
   elif [ -f "$REGFILE" ]; then export AFX_PROJECTS_JSON="$REGFILE"; fi
   exec bash "$G/afx-terminal-agent-launcher.sh" "$@"
 }
@@ -85,10 +98,10 @@ summary() {
   echo "next: afx list | afx <key> | afx fleet | afx gate <venture> <branch> '<cmds>' | afx help"
 }
 
-# Numbered menu so nothing has to be memorized. Projects come from this machine's allforx-projects.json (none on a
+# Numbered menu so nothing has to be memorized. Projects come from this machine's afx-projects.json (none on a
 # repl: the repl's own ~/workspace is offered instead). AFX_MENU_DRYRUN=1 prints the choice instead of running it.
 registry_file() {
-  local f; for f in "${AFX_PROJECTS_JSON:-}" "$G/allforx-projects.json" "$HOME/allforx-projects.json" "$REGFILE"; do
+  local f; for f in "${AFX_PROJECTS_JSON:-}" "$(reg_in "$G")" "$(reg_in "$HOME")" "$REGFILE"; do
     [ -n "$f" ] && [ -f "$f" ] && { echo "$f"; return; }; done
 }
 menu() {
@@ -122,6 +135,36 @@ menu() {
   launch "${args[@]}"
 }
 
+# Pro commands: need a valid per-seat licence (afx license status). Machines with the private tenant preset are the vendor's own
+# and are exempt. The check is offline; the valuable text and logic are served by the vendor's server, not shipped (afx-pack.mjs).
+pro_gate() {
+  if [ -z "${AFX_NO_PRESET:-}" ] && [ -f "$G/afx-config.afx.json" ]; then return 0; fi
+  node "$G/afx-entitlement.mjs" check afx_cli:pro >&2 || exit 3
+}
+# pro_script <file> <what>: a Pro script that is not in this build says so; otherwise the licence is checked, then it runs.
+pro_run() {
+  local f="$1"; shift
+  [ -f "$G/$f" ] || { echo "afx: '$1' is part of AFX CLI Pro and is not in this build." >&2; exit 2; }
+  shift; pro_gate; exec bash "$G/$f" "$@"
+}
+
+# `afx init` makes the machine config; `afx init --project` makes the project's afx.config.json (args with spaces survive).
+init_cmd() {
+  local a args=() project=0
+  for a in "$@"; do if [ "$a" = "--project" ]; then project=1; else args+=("$a"); fi; done
+  if [ "$project" = 1 ]; then exec node "$G/afx-project.mjs" init ${args[@]+"${args[@]}"}; fi
+  exec node "$G/afx-config.mjs" init ${args[@]+"${args[@]}"}
+}
+
+# Rules lines for the briefing: this project's afx.config.json when there is one, else the tenant's rules file (the private
+# AFX preset ships agent-rules/brief-rules.afx.txt), else the neutral default.
+_brief_rules() {
+  local f
+  if node "$G/afx-project.mjs" brief-rules --dir "$PWD" 2>/dev/null; then return 0; fi
+  f="$G/agent-rules/brief-rules.afx.txt"; [ -z "${AFX_NO_PRESET:-}" ] && [ -f "$f" ] && { cat "$f"; return 0; }
+  cat "$G/agent-rules/brief-rules.default.txt" 2>/dev/null
+}
+
 # One briefing for every tool. Claude Code also gets the hook briefing at SessionStart; other tools have only their
 # rules file, so this is what makes them start informed.
 brief() {
@@ -141,15 +184,10 @@ brief() {
   fi
   echo
   echo "## Rules every agent follows"
-  echo "- Edit only in <clone>/.claude/worktrees/<name> on wip/<topic>; never in a canonical clone's working folder."
-  echo "- Uncommitted work you did not make belongs to someone else: never restore, reset, clean or stash it."
-  echo "- Done means merged: land with afx land (afx-land.sh), then remove the worktree. Push within 2h."
-  echo "- pnpm only; no force-push; no direct push to main; real exit codes; no fabricated data."
-  echo "- Heavy builds/tests go to Replit: afx gate <venture> <branch> '<cmds>'. Publish is the owner's click."
-  echo "- A guard block is the rule working: ask the owner (they approve in chat), never route around it."
+  _brief_rules
   echo
   echo "## Commands"
-  echo "afx (menu) | afx list | afx <key> | afx where | afx fleet [--json] | afx gate | afx land | afx init | afx install | afx desktop | afx term | afx help"
+  echo "afx (menu) | afx list | afx <key> | afx where | afx fleet [--json] | afx gate | afx land | afx init | afx doctor | afx rules check | afx license | afx install | afx desktop | afx term | afx help"
   _qd=$(afx_config_get quickstartDoc)
   if [ -n "$_qd" ]; then echo "Full guide: $_qd"; fi
 }
@@ -159,14 +197,37 @@ case "$cmd" in
   "") if [ -t 0 ] && [ -t 1 ]; then menu; else summary; fi ;;
   menu) menu ;;
   brief|context) brief ;;
-  help|-h|--help) sed -n '2,28p' "$SELF" | sed 's/^# \{0,1\}//' ;;
+  help|-h|--help) sed -n '2,38p' "$SELF" | sed 's/^# \{0,1\}//' ;;
   list|-List|--list) launch --list ;;
   start) launch "$@" ;;
   where) exec bash "$G/afx-where-am-i.sh" "${1:-$PWD}" ;;
   fleet) exec node "$G/afx-fleet.mjs" "$@" ;;
-  init) exec node "$G/afx-config.mjs" init "$@" ;;
+  init) init_cmd "$@" ;;
+  doctor) exec node "$G/afx-project.mjs" doctor "$@" ;;
+  project) exec node "$G/afx-project.mjs" "$@" ;;
   gate) [ -f "$G/afx-remote-gate.sh" ] || { echo "afx: 'afx gate' (builds and tests on cloud VMs) is part of AFX CLI Pro and is not in this build." >&2; exit 2; }
-        exec bash "$G/afx-remote-gate.sh" "$@" ;;
+        pro_gate; exec bash "$G/afx-remote-gate.sh" "$@" ;;
+  design-preflight) pro_run afx-design-preflight.sh "afx design-preflight" "$@" ;;
+  status) pro_run afx-status-collect.sh "afx status" "$@" ;;
+  ship-queue) pro_run afx-ship-queue.sh "afx ship-queue" "$@" ;;
+  license) exec node "$G/afx-entitlement.mjs" "$@" ;;
+  rules) case "${1:-}" in render|sync) pro_gate ;; esac; exec node "$G/afx-pack.mjs" "$@" ;;
+  guard) case "${1:-}" in
+           check) exec bash "$G/afx-install-claude-hooks.sh" --check ;;
+           install) exec bash "$G/afx-install-claude-hooks.sh" ;;
+           *) echo "usage: afx guard check | install   (check changes nothing; exit 0 = installed and identical to this checkout)" >&2; exit 2 ;;
+         esac ;;
+  mcp) M="${AFX_MCP_DIR:-$G/../../lib/afx-mcp-server}"
+       if [ ! -f "$M/src/run.mjs" ] && [ ! -f "$G/mcp/run.mjs" ]; then
+         # No local server in this build: the hosted endpoint is the customer route.
+         [ "${1:-}" = "--print-config" ] && exec node "$G/afx-entitlement.mjs" mcp-config
+         echo "afx: no local MCP server in this build. Use the hosted one: afx mcp --print-config (needs a licence or AFX_API_BASE_URL). Or set AFX_MCP_DIR." >&2; exit 2
+       fi
+       [ -f "$M/src/run.mjs" ] || M="$G/mcp"; RUN="$M/src/run.mjs"; [ -f "$RUN" ] || RUN="$M/run.mjs"
+       if [ "${1:-}" = "--print-config" ]; then
+         printf '{\n  "mcpServers": {\n    "afx": {\n      "command": "node",\n      "args": ["%s"],\n      "env": { "AFX_MCP_EDITION": "external" }\n    }\n  }\n}\n' "$(cd "$(dirname "$RUN")" && pwd)/$(basename "$RUN")"; exit 0
+       fi
+       AFX_MCP_EDITION=external exec node "$RUN" "$@" ;;
   land) exec bash "$G/afx-land.sh" "$@" ;;
   propagate) exec bash "$G/afx-propagate.sh" "$@" ;;
   install|update) exec bash "$G/afx-bootstrap.sh" "$@" ;;

@@ -1,13 +1,13 @@
 #!/bin/bash
 # afx-terminal-agent-launcher.sh: the Mac/Linux counterpart to windows/afx-terminal-agent-launcher.ps1
-# (renamed 2026-10-14 from afx-open.sh / Open-AllForX.ps1; the old names remain as forwarding shims).
+# (renamed 2026-10-14 from afx-open.sh; the old names remain as forwarding shims on machines that had them).
 #
 # Sessions START IN THE MACHINE'S HOME FOLDER ($HOME, override AFX_LAUNCH_DIR), not in a clone, so a terminal
 # can do broader work (owner decision 2026-10-14). The focus project is read with git -C and named to the agent
 # via --append-system-prompt. --at-project starts inside the clone instead (only when necessary or asked).
 # `root` opens a session with no focus project. Works unchanged on cloud shells / VMs: home is $HOME there.
 # Same
-# allforx-projects.json schema (see allforx-projects.example.json), same
+# afx-projects.json schema (see afx-projects.example.json), same
 # checks, so every machine starts a session the same way: verify the
 # canonical clone is really that project's repo, fetch (never pull), and
 # print unpushed/uncommitted/stash/worktree/ahead-behind status BEFORE any
@@ -18,9 +18,9 @@
 #   scripts/afx-guard/afx-terminal-agent-launcher.sh htr --no-fetch
 #   scripts/afx-guard/afx-terminal-agent-launcher.sh hub --no-claude     # status only, don't launch
 #
-# Config resolution order: $AFX_PROJECTS_JSON, then allforx-projects.json next
-# to this script, then ~/allforx-projects.json. None of these are committed
-# (see allforx-projects.example.json for the schema and why).
+# Config resolution order: $AFX_PROJECTS_JSON, then afx-projects.json next
+# to this script, then ~/afx-projects.json. None of these are committed
+# (see afx-projects.example.json for the schema and why).
 #
 # Window behavior differs by platform on purpose, matching what each platform
 # actually has:
@@ -51,11 +51,13 @@ for a in "$@"; do
 done
 
 CONFIG="${AFX_PROJECTS_JSON:-}"
-[ -z "$CONFIG" ] && [ -f "$DIR/allforx-projects.json" ] && CONFIG="$DIR/allforx-projects.json"
-[ -z "$CONFIG" ] && [ -f "$HOME/allforx-projects.json" ] && CONFIG="$HOME/allforx-projects.json"
+# afx-projects.json; the pre-0.1.3 name is still read so existing installs keep working.
+for _d in "$DIR" "$HOME"; do for _n in afx-projects.json afx-projects.json; do
+  [ -z "$CONFIG" ] && [ -f "$_d/$_n" ] && CONFIG="$_d/$_n"
+done; done
 if [ -z "$CONFIG" ] || [ ! -f "$CONFIG" ]; then
-  echo "Missing allforx-projects.json (checked \$AFX_PROJECTS_JSON, $DIR/allforx-projects.json, $HOME/allforx-projects.json)." >&2
-  echo "Copy $DIR/allforx-projects.example.json to one of those paths and fill in this machine's real paths." >&2
+  echo "Missing afx-projects.json (checked \$AFX_PROJECTS_JSON, $DIR/afx-projects.json, $HOME/afx-projects.json)." >&2
+  echo "Copy $DIR/afx-projects.example.json to one of those paths and fill in this machine's real paths." >&2
   exit 2
 fi
 

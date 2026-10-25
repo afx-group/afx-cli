@@ -16,12 +16,15 @@
 #     and no failing one: any non-zero EXIT in the Evidence stops it, except a baseline-table step that fails identically on main
 #   - when package.json, a lockfile or another dependency manifest changes, that Evidence names a build, typecheck or test gate
 #     (a docs-only check is not evidence for a dependency change)
-# HARD STOPS that still need the owner (the label `owner-ok` waives them; it never waives a conflict, draft, stale base, missing Evidence or hold label):
+# Owner standing rule (2026-10-22): "Everything is approved so long as it is quality completed code. It is the agent's responsibility to
+# verify and handle this in full. If the guard is blocking our actions then the guard needs to be updated." So a verified, gate-passing
+# change lands without the owner-ok label. Only these hard stops remain (the label `owner-ok` waives them; it never waives a conflict, draft, stale base, missing Evidence or hold label):
 #   - a secret-like value or an .env file in the diff (templates such as .env.example are fine)
-#   - destructive SQL in a migration or .sql file (DROP TABLE/COLUMN/SCHEMA/DATABASE, TRUNCATE, DELETE FROM without WHERE)
-#   - mass deletion: more than 200 removed tracked, non-generated files, unless the PR body says they were moved, renamed or generated
-#   - deploy/runtime config that this policy does not mention (.replit, replit.nix, deploy/, .github/workflows/: Actions is retired fleet-wide)
-# NOT stops any more: package.json, lockfiles, pnpm-workspace, CLAUDE.md, AGENTS.md and other rules files, the registry, machine-rules,
+#   - destructive SQL in a migration or .sql file (DROP TABLE/COLUMN/SCHEMA/DATABASE, TRUNCATE, DELETE FROM without WHERE) unless the PR body has
+#     a line "snapshot: <ref>" naming a backup ref (archive/... or refs/afx/...) that really exists on the remote (checked with git ls-remote;
+#     the word "backup" alone proves nothing)
+#   (Publish/deploy clicks, unpublishing core projects and Replit Agent clicks are owner-only actions, not diff content; no rule here can approve them.)
+# NOT stops any more: mass deletion, deploy/runtime config (.replit, replit.nix, deploy/, workflows), package.json, lockfiles, pnpm-workspace, CLAUDE.md, AGENTS.md and other rules files, the registry, machine-rules,
 # non-destructive migrations, and change size. Dependabot majors are work items for an agent to port and test, not blind merges (see
 # the Operating Standard); this tool only checks the evidence, so an agent must not call a major READY without a port and a passing gate.
 # --execute re-fetches and re-checks each READY PR immediately before `gh pr merge --merge` (a normal merge, never a
@@ -48,7 +51,7 @@ done
 PY=""; for c in python3 python; do if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import json' >/dev/null 2>&1; then PY="$c"; break; fi; done
 [ -z "$PY" ] && { echo "afx-pr-ready: python is needed" >&2; exit 2; }
 if [ -z "${REPOS[0]:-}" ] && [ -z "$REGISTRY" ]; then
-  for c in "$HOME/Projects/allforx-projects.json" "/c/Users/$USER/Projects/allforx-projects.json"; do [ -f "$c" ] && { REGISTRY="$c"; break; }; done
+  for c in "$HOME/Projects/afx-projects.json" "$HOME/Projects/allforx-projects.json" "/c/Users/$USER/Projects/afx-projects.json" "/c/Users/$USER/Projects/allforx-projects.json"; do [ -f "$c" ] && { REGISTRY="$c"; break; }; done
 fi
 LIST="$(mktemp)"; trap 'rm -f "$LIST" "$LIST.p" "$LIST.d" "$LIST.f"' EXIT
 if [ -n "${REPOS[0]:-}" ]; then for r in "${REPOS[@]}"; do printf '%s\t%s\t%s\n' "$r" "main" "$r" >> "$LIST"; done
@@ -66,8 +69,8 @@ fi
 
 # evaluate <detail.json> <files.json> <default-branch> -> prints "READY" or "NOT-READY<TAB>reasons"
 evaluate() {
-  AFX_EVIDENCE_ONLY="$EVONLY" "$PY" - "$1" "$2" "$3" <<'PYEOF'
-import json, re, sys
+  AFX_EVIDENCE_ONLY="$EVONLY" "$PY" - "$1" "$2" "$3" "${4:-}" <<'PYEOF'
+import json, os, re, sys
 def pages(path):                      # gh --paginate prints one JSON array per page, back to back
     s = open(path, encoding="utf-8-sig").read(); dec = json.JSONDecoder(); i = 0; out = []
     while i < len(s):
@@ -113,10 +116,6 @@ for line in ev_text.splitlines():
 if failing: why.append("the Evidence shows a failing gate: " + ", ".join(failing[:3]))
 owner_ok = "owner-ok" in labels
 stops = []   # hard stops, waived only by the owner-ok label
-GENERATED = re.compile(r"(^|/)(node_modules|dist|build|\.next|\.expo|\.turbo|coverage|__pycache__|\.cache|\.vite|out|Pods|DerivedData|\.gate-logs|\.verify-logs|\.agents/skills|\.claude/skills|\.github/skills|\.cursor/skills|\.local/skills|\.local/secondary_skills|\.local/mcp_skills)(/|$)|(^|/)(pnpm-lock\.yaml|package-lock\.json|yarn\.lock|\.fingerprint)$|\.tsbuildinfo$")
-removed = [f["filename"] for f in files if f.get("status") == "removed" and not GENERATED.search(f["filename"])]
-if len(removed) > 200 and not re.search(r"\b(moved|renamed|relocat\w*|generated|regenerat\w*)\b", body, re.I):
-    stops.append("mass deletion: %d tracked non-generated files removed and the body does not say moved/renamed/generated" % len(removed))
 SECRET = re.compile(r"sk-[A-Za-z0-9_-]{20,}|sk_live_[0-9A-Za-z]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|gh[pousr]_[0-9A-Za-z]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[abp]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{30,}|whsec_[0-9A-Za-z]{20,}")
 URLPW = re.compile(r"(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis)://[^:\s/@]+:([^@\s]{6,})@")
 PLACEHOLDER = re.compile(r"^(password|passwd|pass|secret|changeme|change-me|example|your[-_]?password|xxx+|\*+|<.*>|\$\{?\w+\}?|%s|\{\{.*\}\})$", re.I)
@@ -140,9 +139,31 @@ def sql_code(text):
     return re.sub(r"\b(BEFORE|AFTER|INSTEAD\s+OF)\s+[A-Z_,\s]+?\s+ON\b", r"\1 ON", text, flags=re.I)
 sql_files = [f["filename"] for f in files if f.get("status") != "removed" and SQLFILE.search(f["filename"]) and
              DESTRUCTIVE.search(sql_code("\n".join(l[1:] for l in (f.get("patch") or "").splitlines() if l.startswith("+") and not l.startswith("+++"))))]
-if sql_files: stops.append("destructive SQL (needs the owner's production approval): " + ", ".join(sorted(set(sql_files))[:3]))
-deploy = sorted({f["filename"] for f in files if re.search(r"^\.replit$|^replit\.nix$|(^|/)deploy/|^\.github/workflows/", f["filename"])})
-if deploy: stops.append("deploy/runtime config or a workflow (not covered by the hands-off policy; Actions is retired): " + ", ".join(deploy[:3]))
+# A backup claim must be a real reference, not a word: the body needs a line "snapshot: <ref>" and <ref> must exist on the
+# remote (git ls-remote, not the body text). For destructive SQL the ref must be an archive/ or refs/afx/ backup ref.
+def snapshot_ok(text, repo):
+    import subprocess
+    m = re.search(r"^[ \t>*-]*snapshot:[ \t]*`?([A-Za-z0-9._/-]+)`?[ \t]*$", text, re.I | re.M)
+    if not m: return False, "no 'snapshot: <ref>' line in the PR body"
+    ref = m.group(1)
+    if not re.match(r"^(archive/|refs/afx/)[A-Za-z0-9._/-]+$", ref) or ".." in ref:
+        return False, "snapshot ref '%s' must start with archive/ or refs/afx/" % ref
+    remote = os.environ.get("AFX_SNAPSHOT_REMOTE", "")
+    if not remote:
+        try: url = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True, timeout=20).stdout.strip()
+        except Exception: url = ""
+        remote = "origin" if repo and repo in url else ("https://github.com/%s.git" % repo if repo else "origin")
+    try:
+        r = subprocess.run(["git", "ls-remote", remote, ref], capture_output=True, text=True, timeout=60)
+    except Exception as e:
+        return False, "could not run git ls-remote: %s" % e
+    names = [l.split("\t")[1] for l in r.stdout.splitlines() if "\t" in l]
+    if r.returncode != 0 or not any(n == ref or n.endswith("/" + ref) for n in names):
+        return False, "snapshot ref '%s' does not exist on the remote" % ref
+    return True, ""
+if sql_files:
+    ok_snap, snap_why = snapshot_ok(body, sys.argv[4] if len(sys.argv) > 4 else "")
+    if not ok_snap: stops.append("destructive SQL needs a real backup reference (%s): %s" % (snap_why, ", ".join(sorted(set(sql_files))[:3])))
 if stops and not owner_ok: why.append("hard stop, label owner-ok needed: " + "; ".join(stops))
 import os
 if os.environ.get("AFX_EVIDENCE_ONLY") == "1":
@@ -161,14 +182,20 @@ while IFS="$(printf '\t')" read -r repo def key; do
     [ -n "$ONLYPR" ] && [ "$n" != "$ONLYPR" ] && continue
     open_total=$((open_total+1))
     "$GH" api "repos/$repo/pulls/$n" > "$LIST.d" 2>/dev/null; "$GH" api "repos/$repo/pulls/$n/files?per_page=100" --paginate > "$LIST.f" 2>/dev/null
+    # GitHub computes mergeability lazily after a push: "mergeable": null for a few seconds. Poll up to ~30 s instead of reporting a
+    # false NOT-READY (2026-10-23: HTR #340 looked unmergeable for 20 s, then was CLEAN).
+    for _try in 1 2 3 4 5 6; do
+      "$PY" -c 'import json,sys;sys.exit(0 if json.load(open(sys.argv[1],encoding="utf-8-sig")).get("mergeable") is None else 1)' "$LIST.d" || break
+      sleep 5; "$GH" api "repos/$repo/pulls/$n" > "$LIST.d" 2>/dev/null
+    done
     title=$("$PY" -c 'import json,sys;print(json.load(open(sys.argv[1],encoding="utf-8-sig")).get("title","")[:60])' "$LIST.d")
-    v=$(evaluate "$LIST.d" "$LIST.f" "$def")
+    v=$(evaluate "$LIST.d" "$LIST.f" "$def" "$repo")
     if [ "${v%%$(printf '\t')*}" = "READY" ]; then
       ready_total=$((ready_total+1)); printf '%-8s %-22s #%-5s %s\n' "READY" "$repo" "$n" "$title"
       if [ "$EXEC" = 1 ] && [ "$merged" -lt "$MAXM" ]; then
         # re-check immediately before merging: state can change between listing and now
         "$GH" api "repos/$repo/pulls/$n" > "$LIST.d" 2>/dev/null; "$GH" api "repos/$repo/pulls/$n/files?per_page=100" --paginate > "$LIST.f" 2>/dev/null
-        v2=$(evaluate "$LIST.d" "$LIST.f" "$def")
+        v2=$(evaluate "$LIST.d" "$LIST.f" "$def" "$repo")
         if [ "${v2%%$(printf '\t')*}" = "READY" ]; then
           if "$GH" pr merge "$n" -R "$repo" --merge >/dev/null 2>&1; then merged=$((merged+1)); echo "         merged $repo#$n"
           else echo "         MERGE FAILED $repo#$n: stopping" >&2; exit 1; fi

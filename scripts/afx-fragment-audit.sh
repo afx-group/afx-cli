@@ -1,6 +1,6 @@
 #!/bin/bash
 # afx-fragment-audit.sh: find code that exists ONLY on this machine (unpushed commits, stashes,
-# dirty or untracked files, worktrees) across every repo under the AllForX clones folder, plus
+# dirty or untracked files, worktrees) across every repo under the clones folder, plus
 # stray git clones elsewhere.
 #   scripts/afx-guard/afx-fragment-audit.sh [root]
 #
@@ -48,7 +48,7 @@ fi
 
 # Git config hygiene: safe.directory / worktree / remote entries pointing at
 # paths that no longer exist, or that are explicitly forbidden (a machine's
-# own "neverWorkIn" list in allforx-projects.json, or a known-legacy path like
+# own "neverWorkIn" list in afx-projects.json, or a known-legacy path like
 # C:\afx on the Lenovo). Stale entries are metadata debris, not urgent, but
 # they are exactly the fingerprint of the "worked outside the canonical clone"
 # mistake the portfolio's rules exist to prevent (Windows/Lenovo finding,

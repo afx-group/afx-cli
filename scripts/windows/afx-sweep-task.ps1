@@ -11,7 +11,7 @@
                the newest sweep each time means a fix merged to main applies on the next run, and the sweep's own
                guard self-update then refreshes ~/.claude/hooks/afx-guard.
   -RunNow      start the registered task now.     -Status   show it.     -Unregister   remove it.
-  Hub folder: machine.conf hub=, else the "hub" project in allforx-projects.json next to the launcher.
+  Hub folder: machine.conf hub=, else the "hub" project in afx-projects.json next to the launcher.
   Log: %USERPROFILE%\.afx\logs\afx-sweep-task.log
 
 .EXAMPLE
@@ -34,7 +34,8 @@ function Find-Hub {
     $line = Get-Content $conf | Where-Object { $_ -like 'hub=*' } | Select-Object -First 1
     if ($line) { $p = $line.Substring(4).Trim(); if (Test-Path (Join-Path $p '.git')) { return $p } }
   }
-  $reg = Join-Path $env:USERPROFILE 'Projects\allforx-projects.json'
+  $reg = Join-Path $env:USERPROFILE 'Projects\afx-projects.json'
+  if (-not (Test-Path $reg)) { $reg = Join-Path $env:USERPROFILE 'Projects\allforx-projects.json' }  # pre-0.1.3 name
   if (Test-Path $reg) {
     $hub = (Get-Content $reg -Raw | ConvertFrom-Json).projects | Where-Object { $_.key -eq 'hub' } | Select-Object -First 1
     if ($hub -and (Test-Path (Join-Path $hub.path '.git'))) { return $hub.path }
@@ -45,7 +46,7 @@ function Find-Hub {
 if ($Run) {
   if (-not (Test-Path $bash)) { Log 'FAIL: Git Bash not found (the WSL bash on PATH must not be used)'; exit 1 }
   $hub = Find-Hub
-  if (-not $hub) { Log 'FAIL: hub clone not found (machine.conf hub= or allforx-projects.json)'; exit 1 }
+  if (-not $hub) { Log 'FAIL: hub clone not found (machine.conf hub= or afx-projects.json)'; exit 1 }
   $tmp = Join-Path $env:TEMP ("afx-sweep-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
   New-Item -ItemType Directory -Force $tmp | Out-Null
   try {
@@ -58,10 +59,11 @@ if ($Run) {
     $sha = (& git -C $hub rev-parse --short origin/main).Trim()
     $env:AFX_HUB = $hub
     # Without machine.conf root= the sweep fell back to ~/Projects, so its reports landed in ~/_readiness (the home
-    # folder) on 2026-10-20. Use the registry root (Projects\AllForX) so they go to Projects\_readiness.
+    # folder) on 2026-10-20. Use the registry root (the projects root) so they go to Projects\_readiness.
     $conf = Join-Path $env:USERPROFILE '.claude\hooks\afx-guard\machine.conf'
     $hasRoot = (Test-Path $conf) -and (Get-Content $conf | Where-Object { $_ -like 'root=*' })
-    $reg = Join-Path $env:USERPROFILE 'Projects\allforx-projects.json'
+    $reg = Join-Path $env:USERPROFILE 'Projects\afx-projects.json'
+  if (-not (Test-Path $reg)) { $reg = Join-Path $env:USERPROFILE 'Projects\allforx-projects.json' }  # pre-0.1.3 name
     if (-not $hasRoot -and -not $env:AFX_CLONES_ROOT -and (Test-Path $reg)) {
       $root = (Get-Content $reg -Raw | ConvertFrom-Json).root
       if ($root -and (Test-Path $root)) { $env:AFX_CLONES_ROOT = $root.Replace('\', '/') }

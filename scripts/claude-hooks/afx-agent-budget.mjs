@@ -14,7 +14,11 @@
 //   (the agent's own first afx-agent-status.sh write replaces it, matched on label = the Agent `description`). No budget line: counted
 //   as AFX_DEFAULT_BUDGET (500k) with a reminder. Override: [claude-ok] in the prompt (the owner-approval token this hook already honours).
 //   Unlike the weekly levels this also applies at low weekly usage: it protects the shared 5-hour window. Stale usage: not enforced.
-// Env overrides for tests: AFX_USAGE_FILE, AFX_MACHINE_CONF, AFX_NOW_S, AFX_AGENTS_DIR (POOL.json lives there), AFX_DEFAULT_BUDGET.
+// MANUAL WEEKLY (2026-10-23): the owner reads the weekly limit in the Claude app and records it with `afx-agent-status.sh pool set-weekly <pct> <reset ISO>`
+//   (~/.afx/agents/WEEKLY.json). While that week has not reset, the HIGHER of snapshot and manual figure drives the weekly levels above, and a stale
+//   snapshot no longer switches enforcement off (the week only goes up, so an old manual figure is a lower bound). The five-hour pool gate is unaffected.
+// OVERRIDE TOKEN: only the exact literal `[claude-ok]` (square brackets, lowercase) anywhere in the launch input counts; refusals now say so.
+// Env overrides for tests: AFX_WEEKLY_FILE, AFX_USAGE_FILE, AFX_MACHINE_CONF, AFX_NOW_S, AFX_AGENTS_DIR (POOL.json lives there), AFX_DEFAULT_BUDGET.
 import { readFileSync, writeFileSync, renameSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -23,6 +27,23 @@ import { fileURLToPath } from "node:url";
 const DIR = join(homedir(), ".claude/hooks/afx-guard");
 const USAGE = process.env.AFX_USAGE_FILE || join(DIR, "usage-latest.json");
 const CONF = process.env.AFX_MACHINE_CONF || join(DIR, "machine.conf");
+
+export const OVERRIDE_HELP = "Override (owner-approved launches only): put the exact literal token [claude-ok] (square brackets, lowercase; no other spelling is recognised) in the prompt together with the owner's quoted approval.";
+
+// Manual weekly figure, or null when absent/expired. { pct, resetsAtS }
+export function readManualWeekly(nowS, file) {
+  try {
+    const w = JSON.parse(readFileSync(file, "utf8")); const r = Date.parse(w.resets_at) / 1000;
+    if (typeof w.used_pct !== "number" || !(r > nowS)) return null;
+    return { pct: w.used_pct, resetsAtS: r };
+  } catch { return null; }
+}
+// The usage object decide() sees: snapshot, with the weekly figure raised to the manual one when that is higher (or the snapshot has none).
+export function withManualWeekly(usage, manual) {
+  if (!manual) return usage;
+  if (usage && typeof usage.weeklyUsedPct === "number" && usage.weeklyUsedPct >= manual.pct) return usage;
+  return { ...(usage || {}), weeklyUsedPct: manual.pct, weeklySource: "manual" };
+}
 
 export function readConf(text) {
   const num = (k, d) => { const m = text.match(new RegExp(`^${k}=(\\d+)`, "m")); return m ? Number(m[1]) : d; };
@@ -56,16 +77,16 @@ export function decide(input, usage, conf, nowS) {
   const ok = blob.includes("[claude-ok]");
   const model = String(ti.model || "").toLowerCase();
   const isHaiku = tool !== "Workflow" && model.includes("haiku");
-  const head = `AFX token budget: weekly Claude usage ${pct}% (5h ${usage.fiveHourUsedPct ?? "?"}%)`;
+  const head = `AFX token budget: weekly Claude usage ${pct}%${usage.weeklySource === "manual" ? " (owner-entered via pool set-weekly)" : ""} (5h ${usage.fiveHourUsedPct ?? "?"}%)`;
   const tips = "Queue mechanical work with `afx-task add <repo> \"<goal>\" --class ...` (local Aider/Ollama, near-zero Claude tokens), use haiku for subagents, and keep reports short.";
-  if (Number.isFinite(age) && age > conf.staleS) {
+  if (Number.isFinite(age) && age > conf.staleS && usage.weeklySource !== "manual") {
     return { ctx: `${head}, but the usage snapshot is ${Math.round(age / 60)} min old (stale): not enforcing. ${tips}` };
   }
   if (pct >= conf.deny && !ok) {
-    return { deny: `${head} >= ${conf.deny}%: all subagent/workflow launches are blocked. Do the work inline, queue it with afx-task, or add [claude-ok] to the prompt if the owner approved this launch.` };
+    return { deny: `${head} >= ${conf.deny}%: all subagent/workflow launches are blocked. Do the work inline, queue it with afx-task, or ask the owner. ${OVERRIDE_HELP}` };
   }
   if (pct >= conf.haiku && !ok && !isHaiku) {
-    return { deny: `${head} >= ${conf.haiku}%: only haiku subagents are allowed (no Workflow, no sonnet/opus). Relaunch with model: haiku, queue it with afx-task add, or add [claude-ok] if the owner approved.` };
+    return { deny: `${head} >= ${conf.haiku}%: only haiku subagents are allowed (no Workflow, no sonnet/opus). Relaunch with model: haiku, queue it with afx-task add, or ask the owner. ${OVERRIDE_HELP}` };
   }
   const win = windowNote(usage, nowS);
   if (pct >= conf.warn) return { ctx: `${head} >= ${conf.warn}%. ${tips}${win ? " " + win : ""}` };
@@ -114,7 +135,7 @@ export function poolDecision(input, usage, pool, nowS, conf) {
   if (declared + tokens > ceiling && !ok) {
     const r = usage.fiveHourResetsAt; const rs = typeof r === "number" ? (r > 1e12 ? r / 1000 : r) : null;
     const when = rs && rs > nowS ? ` The window resets ${isoS(rs)} (in ${Math.round((rs - nowS) / 60)} min): schedule the launch just after it.` : "";
-    return { deny: `AFX pool gate: ${line}. Refused so the fleet cannot exhaust the shared window.${when} Options: shrink this agent's budget, wait for a running agent to finish, free dead agents with the health-reaper script (--apply), recalibrate with afx-agent-status.sh pool set-window N, or add [claude-ok] to the prompt if the owner approved this launch.` };
+    return { deny: `AFX pool gate: ${line}. Refused so the fleet cannot exhaust the shared window.${when} Options: shrink this agent's budget, wait for a running agent to finish, free dead agents with the health-reaper script (--apply), recalibrate with afx-agent-status.sh pool set-window N, or ask the owner. ${OVERRIDE_HELP}` };
   }
   const nearly = declared + tokens > ceiling * 0.8;
   out.ctx = [note, ok && declared + tokens > ceiling ? `AFX pool gate overridden by [claude-ok]: ${line}.` : nearly ? `AFX pool: ${line}. Close to the ceiling: prefer finishing running agents first.` : ""].filter(Boolean).join(" ");
@@ -148,7 +169,8 @@ function main() {
   try { usage = JSON.parse(readFileSync(USAGE, "utf8")); } catch {}
   try { conf = readConf(readFileSync(CONF, "utf8")); } catch { conf = readConf(""); }
   const nowS = process.env.AFX_NOW_S ? Number(process.env.AFX_NOW_S) : Date.now() / 1000;
-  const r = decide(input, usage, conf, nowS);
+  const manual = readManualWeekly(nowS, process.env.AFX_WEEKLY_FILE || join(process.env.AFX_AGENTS_DIR || join(homedir(), ".afx", "agents"), "WEEKLY.json"));
+  const r = decide(input, withManualWeekly(usage, manual), conf, nowS);
   if (r && r.deny) { emit({ permissionDecision: "deny", permissionDecisionReason: r.deny }); return; }
   let p = null;
   try {

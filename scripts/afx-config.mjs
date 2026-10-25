@@ -29,7 +29,7 @@ export const DEFAULTS = Object.freeze({
   extraOrgs: Object.freeze([]),
   clonesRootMac: "~/afx/clones",
   clonesRootWindows: "~/afx/clones",
-  registryFile: "~/.afx/allforx-projects.json",
+  registryFile: "~/.afx/afx-projects.json",
   brand: "AFX CLI",
   quickstartDoc: "",
   enabledModules: "all",
@@ -108,7 +108,7 @@ export function buildInit(flags) {
   const out = { version: 1 };
   if (flags.org) out.org = flags.org;
   if (flags["hub-repo"]) out.hubRepo = flags["hub-repo"];
-  else if (flags.org) out.hubRepo = `${flags.org}/afx-hub`;
+
   if (flags.root) { out.clonesRootMac = flags.root; out.clonesRootWindows = flags.root; }
   if (flags.brand) out.brand = flags.brand;
   return out;
@@ -119,7 +119,7 @@ async function prompt(flags) {
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   const ask = async (label, def) => ((await rl.question(`${label} [${def}]: `)).trim() || def);
   flags.org = flags.org || (await ask("GitHub org", DEFAULTS.org || "my-org"));
-  flags["hub-repo"] = flags["hub-repo"] || (await ask("Hub repo (owner/repo)", `${flags.org}/afx-hub`));
+  flags["hub-repo"] = flags["hub-repo"] || (await ask("Hub repo (owner/repo, blank for none)", ""));
   flags.root = flags.root || (await ask("Clones root", DEFAULTS.clonesRootWindows));
   rl.close();
 }

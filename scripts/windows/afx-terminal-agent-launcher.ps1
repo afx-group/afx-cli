@@ -1,12 +1,12 @@
 ﻿<#
 .SYNOPSIS
-  afx-terminal-agent-launcher (formerly Open-AllForX.ps1, which remains as a forwarding shim):
-  the one way to start a Claude Code session for an AllForX project. Starts in the machine's home folder.
+  afx-terminal-agent-launcher (the older launcher name remains as a forwarding shim):
+  the one way to start a Claude Code session for an AFX project. Starts in the machine's home folder.
 
 .DESCRIPTION
   Opens a dedicated PowerShell window in the machine's home folder (override: AFX_LAUNCH_DIR;
   -AtProject uses the clone instead), reads the project's canonical clone from
-  allforx-projects.json next to this script, checks that the folder really is
+  afx-projects.json next to this script, checks that the folder really is
   that project's repo, fetches (never pulls), prints what is unpushed or
   uncommitted, and starts claude there.
 
@@ -32,7 +32,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$configPath = Join-Path $PSScriptRoot 'allforx-projects.json'
+$configPath = Join-Path $PSScriptRoot 'afx-projects.json'
+if (-not (Test-Path $configPath)) { $configPath = Join-Path $PSScriptRoot 'allforx-projects.json' }  # pre-0.1.3 name
 if (-not (Test-Path $configPath)) { throw "Missing $configPath - it is the source of truth for project paths." }
 $config = Get-Content $configPath -Raw | ConvertFrom-Json
 $projects = $config.projects
@@ -87,7 +88,7 @@ if ($Project -eq 'root') {
     return
   }
   Set-Location -LiteralPath $homeDir
-  $host.UI.RawUI.WindowTitle = 'AllForX - root'
+  $host.UI.RawUI.WindowTitle = 'AFX - root'
   if ($NoClaude) { Write-Host "Root session folder: $homeDir"; return }
   $claudeArgs = @()
   if ($Model) { $claudeArgs += @('--model', $Model) }
@@ -128,7 +129,7 @@ if (-not $Here) {
 # inspected with `git -C` and named in the session's context. -AtProject starts inside the clone instead.
 $startDir = $(if ($AtProject) { $p.path } else { $homeDir })
 Set-Location -LiteralPath $startDir
-$host.UI.RawUI.WindowTitle = "AllForX - $($p.name)"
+$host.UI.RawUI.WindowTitle = "AFX - $($p.name)"
 $target = $(if ($p.stagingBranch) { $p.stagingBranch } else { $p.defaultBranch })
 
 Write-Host ""

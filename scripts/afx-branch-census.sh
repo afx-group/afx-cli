@@ -53,7 +53,7 @@ to_unix() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1" 2>/dev/n
 
 # Registry default locations (first that exists).
 if [ -z "$REGISTRY" ] && [ -z "${REPOS_ARG[0]:-}" ]; then
-  for c in "$HOME/Projects/allforx-projects.json" "/c/Users/$USER/Projects/allforx-projects.json" "$(dirname "${AFX_CLONES_ROOT:-/nonexistent}")/allforx-projects.json"; do
+  for c in "$HOME/Projects/afx-projects.json" "$HOME/Projects/allforx-projects.json" "/c/Users/$USER/Projects/afx-projects.json" "/c/Users/$USER/Projects/allforx-projects.json" "$(dirname "${AFX_CLONES_ROOT:-/nonexistent}")/afx-projects.json" "$(dirname "${AFX_CLONES_ROOT:-/nonexistent}")/allforx-projects.json"; do
     [ -f "$c" ] && { REGISTRY="$c"; break; }
   done
   [ -z "$REGISTRY" ] && { echo "afx-branch-census: no registry found; pass --registry FILE or --repo PATH" >&2; exit 2; }

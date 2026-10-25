@@ -18,7 +18,7 @@
 #   2. sparse-fetches ONLY scripts/afx-guard from the hub into DEST/src (a tooling cache, not a project clone)
 #   3. exports it to DEST/afx-guard and records the commit in DEST/afx-guard/.exported-from-sha
 #   4. installs the launcher and the short `afx` command to DEST/bin and prints the PATH line
-#   5. creates DEST/allforx-projects.json from the example if you have no registry (fill in real paths)
+#   5. creates DEST/afx-projects.json from the example if you have no registry (fill in real paths)
 # It does NOT clone any project, install hooks, write secrets, or change shell profiles.
 set -u
 DEST="${AFX_HOME:-$HOME/.afx}"; REF="main"; CHECK=0; REGISTRY=1
@@ -93,6 +93,11 @@ if [ -f "$L" ]; then
     printf '#!/bin/bash\nexport AFX_GUARD_DIR="%s"\nexec bash "%s" "$@"\n' "$DEST/afx-guard" "$DEST/afx-guard/afx" > "$DEST/bin/afx"
     chmod +x "$DEST/bin/afx" 2>/dev/null
     ok "installed $DEST/bin/afx (short name: afx list, afx <key>, afx fleet, afx gate ...)"
+    case "$(uname -s)" in   # Windows: cmd and PowerShell cannot run the bash wrapper, so add afx.cmd beside it (bin/ is on the user PATH)
+      MINGW*|MSYS*|CYGWIN*)
+        printf '@echo off\r\nset "AFX_BASH=%%ProgramFiles%%\\Git\\bin\\bash.exe"\r\nif not exist "%%AFX_BASH%%" set "AFX_BASH=bash.exe"\r\n"%%AFX_BASH%%" "%%~dp0..\\afx-guard\\afx" %%*\r\n' > "$DEST/bin/afx.cmd"
+        ok "installed $DEST/bin/afx.cmd (cmd and PowerShell; make sure $DEST/bin is on the Windows user PATH)" ;;
+    esac
   fi
   echo "        add to PATH:  export PATH=\"$DEST/bin:\$PATH\"   (and export AFX_GUARD_DIR=\"$DEST/afx-guard\")"
 else
@@ -102,9 +107,9 @@ fi
 echo "5. registry"
 if [ "$REGISTRY" = 1 ]; then
   if [ -n "${AFX_PROJECTS_JSON:-}" ] && [ -f "$AFX_PROJECTS_JSON" ]; then ok "using \$AFX_PROJECTS_JSON"
-  elif [ -f "$DEST/allforx-projects.json" ] || [ -f "$HOME/allforx-projects.json" ] || [ -f "$HOME/Projects/allforx-projects.json" ]; then ok "registry already present"
-  elif [ -f "$DEST/afx-guard/allforx-projects.example.json" ]; then
-    cp "$DEST/afx-guard/allforx-projects.example.json" "$DEST/allforx-projects.json" && did "stub at $DEST/allforx-projects.json: edit it to this machine's real paths, then export AFX_PROJECTS_JSON=$DEST/allforx-projects.json"
+  elif [ -f "$DEST/afx-projects.json" ] || [ -f "$HOME/afx-projects.json" ] || [ -f "$HOME/Projects/afx-projects.json" ] || [ -f "$DEST/allforx-projects.json" ] || [ -f "$HOME/allforx-projects.json" ] || [ -f "$HOME/Projects/allforx-projects.json" ]; then ok "registry already present"
+  elif [ -f "$DEST/afx-guard/afx-projects.example.json" ]; then
+    cp "$DEST/afx-guard/afx-projects.example.json" "$DEST/afx-projects.json" && did "stub at $DEST/afx-projects.json: edit it to this machine's real paths, then export AFX_PROJECTS_JSON=$DEST/afx-projects.json"
   fi
 fi
 echo

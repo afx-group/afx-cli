@@ -1,0 +1,5 @@
+- Work on a branch in a git worktree, never directly on the default branch; land through a pull request with `afx land`, then remove the worktree.
+- Uncommitted work you did not make belongs to someone else: never restore, reset, clean or stash it.
+- Done means merged and pushed. Push your branch before you end a session.
+- No force-push; use one package manager; report real exit codes; no fabricated data. Run `afx init --project` to make these rules match your project.
+- A guard block is the rule working: ask the owner, never route around it.

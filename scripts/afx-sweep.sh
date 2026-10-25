@@ -90,7 +90,7 @@ tmp="$REPORT.tmp.$$"
   # check the registry against reality (afx-branch-census.sh). Report-only; needs allforx-projects.json, so it runs
   # on the machines that have the registry (the Windows PC) and is skipped elsewhere.
   CREG="${AFX_REGISTRY:-}"
-  if [ -z "$CREG" ]; then for _c in "$HOME/Projects/allforx-projects.json" "/c/Users/${USER:-}/Projects/allforx-projects.json"; do [ -f "$_c" ] && { CREG="$_c"; break; }; done; fi
+  if [ -z "$CREG" ]; then for _c in "$HOME/Projects/afx-projects.json" "$HOME/Projects/allforx-projects.json" "/c/Users/${USER:-}/Projects/afx-projects.json" "/c/Users/${USER:-}/Projects/allforx-projects.json"; do [ -f "$_c" ] && { CREG="$_c"; break; }; done; fi
   if [ -n "$CREG" ] && due census 86400; then
     CENSUS_OUT="$(dirname "$REPORT")/BRANCH_CENSUS_LATEST.md"
     echo
@@ -161,6 +161,17 @@ tmp="$REPORT.tmp.$$"
   # Git integrity (weekly, read-only): the 2026-09-27 NTFS/Drive incident left a corrupt pack in the Lenovo hub clone
   # that went unnoticed until a checkout failed on 2026-10-20. fsck --connectivity-only reads every object's links;
   # failures go to the report and to ~/.claude/hooks/afx-guard/git-integrity, which the session briefing shows in red.
+  # A BAD flag is re-checked on every sweep for just the flagged clones (2026-10-23: two clones were repaired and the briefing stayed red
+  # until the next weekly run). Cheap, read-only; clears to OK only when every flagged clone passes now.
+  GI0="$HOME/.claude/hooks/afx-guard/git-integrity"
+  if [ -f "$GI0" ] && head -1 "$GI0" | grep -q '^BAD '; then
+    still=""; for r in $(head -1 "$GI0" | sed 's/^BAD [^ ]* [^ ]*: *//'); do
+      [ -d "$r/.git" ] || continue
+      afx_platform_timeout 900 nice -n 15 git -C "$r" fsck --connectivity-only --no-dangling >/dev/null 2>&1 || still="$still $r"
+    done
+    if [ -z "$still" ]; then printf 'OK %s: previously flagged clones now pass\n' "$(date '+%Y-%m-%d %H:%M')" > "$GI0"; echo "## Git integrity: flagged clones repaired, flag cleared"
+    else printf 'BAD %s:%s\n' "$(date '+%Y-%m-%d %H:%M')" "$still" > "$GI0"; fi
+  fi
   if due fsck 604800; then
     echo
     echo "## Git integrity (weekly fsck --connectivity-only)"

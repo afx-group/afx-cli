@@ -33,7 +33,7 @@ while [ $# -gt 0 ]; do
 done
 PY=""; for c in python3 python; do if command -v "$c" >/dev/null 2>&1 && "$c" -c 'import json' >/dev/null 2>&1; then PY="$c"; break; fi; done
 [ -z "$PY" ] && { echo "afx-sync-clones: python is needed to read the registry" >&2; exit 2; }
-if [ -z "$REGISTRY" ] && [ -z "$CLONES_ROOT" ]; then for c in "$HOME/Projects/allforx-projects.json" "/c/Users/${USER:-}/Projects/allforx-projects.json"; do [ -f "$c" ] && { REGISTRY="$c"; break; }; done; fi
+if [ -z "$REGISTRY" ] && [ -z "$CLONES_ROOT" ]; then for c in "$HOME/Projects/afx-projects.json" "$HOME/Projects/allforx-projects.json" "/c/Users/${USER:-}/Projects/afx-projects.json" "/c/Users/${USER:-}/Projects/allforx-projects.json"; do [ -f "$c" ] && { REGISTRY="$c"; break; }; done; fi
 [ -z "$REGISTRY" ] && [ -z "$CLONES_ROOT" ] && { echo "afx-sync-clones: no registry found (pass --registry FILE or --clones-root DIR)" >&2; exit 2; }
 to_unix() { if command -v cygpath >/dev/null 2>&1; then cygpath -u "$1" 2>/dev/null || echo "$1"; else echo "$1"; fi; }
 LIST="$(mktemp)"; trap 'rm -f "$LIST"' EXIT

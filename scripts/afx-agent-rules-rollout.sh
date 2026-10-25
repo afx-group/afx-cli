@@ -8,10 +8,17 @@
 # skipped; a repo that fails is reported and the loop continues. Exit 1 if any repo failed. Makes no model calls.
 #   AFX_COMMIT_TRAILER   optional text appended to each commit message (for example attribution lines)
 # --projects: the shared registry (default: scripts/afx-guard/registry/projects.json, for status and paused).
-# --registry: this machine's composed file (default: ~/Projects/allforx-projects.json, for each clone's folder).
+# --registry: this machine's composed file, for each clone's folder (default: $AFX_REGISTRY, else ~/afx-projects.json when it
+#   exists, else ~/Projects/afx-projects.json; the older allforx-projects.json name is also read). A repo is joined to its folder by key OR alias, in either direction: the shared
+#   key "app" finds the local entry keyed "my-app" (or one that lists "app" as an alias), so the two files need not
+#   spell a key the same way. An exact key match always wins over an alias match.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-APPLY=0; ONLY=""; PROJECTS="$HERE/registry/projects.json"; REGISTRY="${AFX_REGISTRY:-$HOME/Projects/allforx-projects.json}"
+APPLY=0; ONLY=""; PROJECTS="$HERE/registry/projects.json"; REGISTRY="${AFX_REGISTRY:-}"
+if [ -z "$REGISTRY" ]; then
+  REGISTRY="$HOME/Projects/afx-projects.json"
+  for _c in "$HOME/afx-projects.json" "$HOME/allforx-projects.json" "$HOME/Projects/afx-projects.json" "$HOME/Projects/allforx-projects.json"; do [ -f "$_c" ] && { REGISTRY="$_c"; break; }; done
+fi
 TITLE="docs(agent-rules): refresh the AFX rules block from the hub template"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -36,14 +43,24 @@ import json, os, sys
 shared = json.load(open(sys.argv[1], encoding="utf-8-sig"))["projects"]
 local = json.load(open(sys.argv[2], encoding="utf-8-sig"))["projects"]
 local = list(local.values()) if isinstance(local, dict) else local
-paths = {p["key"]: p.get("path", "") for p in local}
+def names(p):
+    return {str(n).lower() for n in [p.get("key", "")] + list(p.get("aliases") or []) if n}
+by_key = {p["key"]: p.get("path", "") for p in local}
+def find_path(sp):
+    if by_key.get(sp["key"]):
+        return by_key[sp["key"]]
+    want = names(sp)
+    for lp in local:
+        if lp.get("path") and want & names(lp):
+            return lp["path"]
+    return ""
 only = {k for k in sys.argv[3].split(",") if k}
 for p in shared:
     if p.get("status") != "live" or p.get("paused"):
         continue
     if only and p["key"] not in only:
         continue
-    path = paths.get(p["key"], "")
+    path = find_path(p)
     if path and os.path.isdir(path):
         print(f'{p["key"]}|{p["repo"]}|{path}')
 PY

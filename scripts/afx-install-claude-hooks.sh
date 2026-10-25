@@ -23,8 +23,8 @@ SRC="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 SRC_SHA="${AFX_SOURCE_SHA:-$(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo unknown)}"
 DEST="$HOME/.claude/hooks/afx-guard"
 SETTINGS="$HOME/.claude/settings.json"
-GUARD_FILES="afx-platform.sh afx-config.mjs afx-config-defaults.sh afx-preflight.sh afx-fragment-audit.sh afx-preserve-all.sh afx-sweep.sh afx-where-am-i.sh afx-workspace-status.sh afx-freeze.sh afx-approve-model.sh afx-approve-spend.sh afx-lock.sh afx-gate-slots.sh afx-gate-run.sh afx-mask-secrets.sh afx-digest.mjs claude-hooks/afx-policy-guard.mjs claude-hooks/afx-agent-budget.mjs claude-hooks/afx-statusline.sh claude-hooks/afx-local-hint.mjs claude-hooks/afx-token-hygiene.mjs"
-PEER_FILES="afx-peer-limit.mjs afx-owner-decisions-guard.mjs afx-owner-ask.sh afx-owner-decide.sh afx-owner-decisions.sh peer-lanes.json"
+GUARD_FILES="afx-platform.sh afx-config.mjs afx-config-defaults.sh afx-preflight.sh afx-fragment-audit.sh afx-preserve-all.sh afx-sweep.sh afx-where-am-i.sh afx-workspace-status.sh afx-freeze.sh afx-approve-model.sh afx-approve-spend.sh afx-lock.sh afx-gate-slots.sh afx-gate-run.sh afx-mask-secrets.sh afx-digest.mjs claude-hooks/afx-policy-guard.mjs claude-hooks/afx-agent-budget.mjs claude-hooks/afx-statusline.sh claude-hooks/afx-local-hint.mjs claude-hooks/afx-token-hygiene.mjs registry/remote-probes.txt"
+PEER_FILES="afx-peer-limit.mjs afx-board-hook.mjs afx-board.sh afx-board.mjs afx-owner-decisions-guard.mjs afx-owner-ask.sh afx-owner-decide.sh afx-owner-decisions.sh peer-lanes.json"
 # The tenant preset (private tier: AFX's own values for afx-config.mjs / afx-config-defaults.sh). Copied only when it exists in the
 # source tree, so a core-only tree installs fine; present on AFX machines, so their values stay exactly as before.
 PRESET_FILES=""; for _p in afx-config.afx.json afx-config-defaults.afx.sh; do [ -f "$SRC/$_p" ] && PRESET_FILES="$PRESET_FILES $_p"; done; PRESET_FILES="${PRESET_FILES# }"
@@ -47,7 +47,8 @@ const { DEST, SETTINGS } = process.env;
 const d = existsSync(SETTINGS) ? JSON.parse(readFileSync(SETTINGS, "utf8")) : {};
 const want = [["SessionStart", "", "afx-policy-guard"], ["UserPromptSubmit", "", "afx-policy-guard"], ["PreToolUse", "Bash|PowerShell", "afx-policy-guard"],
   ["PreToolUse", "Write|Edit|MultiEdit|NotebookEdit", "afx-policy-guard"], ["PreToolUse", "Agent|Task", "afx-policy-guard"], ["Stop", "", "afx-policy-guard"],
-  ["PreToolUse", "SendMessage", "afx-peer-limit"], ["UserPromptSubmit", "", "afx-token-hygiene"], ["PreToolUse", "Read|Bash|ScheduleWakeup", "afx-token-hygiene"], ["PreToolUse", "Bash|Write|Edit|MultiEdit|NotebookEdit", "afx-owner-decisions-guard"]];
+  ["PreToolUse", "SendMessage", "afx-peer-limit"], ["UserPromptSubmit", "", "afx-token-hygiene"], ["PreToolUse", "Read|Bash|ScheduleWakeup", "afx-token-hygiene"], ["PreToolUse", "Bash|Write|Edit|MultiEdit|NotebookEdit", "afx-owner-decisions-guard"],
+  ["UserPromptSubmit", "", "afx-board-hook"], ["PostToolUse", "Bash|Read|Edit|Write", "afx-board-hook"]];
 let missing = 0;
 for (const [ev, matcher, script] of want) {
   const ok = (d.hooks?.[ev] || []).some((e) => (e.matcher || "") === matcher && (e.hooks || []).some((h) => (h.command || "").includes(`${DEST}/${script}`)));
@@ -57,6 +58,19 @@ if (!missing) console.log("  settings.json: all AFX hook entries present");
 process.exit(missing ? 1 : 0);
 ' || rc=1
   exit $rc
+fi
+# Landed-source check (2026-10-23): agents may run this installer after their change landed (the policy guard allows only the bare
+# form), so a source tree that is dirty or not contained in origin/main is refused: an unreviewed guard never goes live. Skipped for
+# a `git archive` export (no checkout) and for --remove; the owner overrides with AFX_INSTALL_ALLOW_UNLANDED=1 on a ! command.
+if [ "${1:-}" != "--remove" ] && [ -z "${AFX_SOURCE_SHA:-}" ] && [ "${AFX_INSTALL_ALLOW_UNLANDED:-0}" != "1" ] \
+   && git -C "$SRC" rev-parse --git-dir >/dev/null 2>&1; then
+  git -C "$SRC" fetch -q origin main 2>/dev/null || true
+  if [ -n "$(git -C "$SRC" status --porcelain -- . 2>/dev/null)" ]; then
+    echo "afx-install-claude-hooks: REFUSED: $SRC has uncommitted changes; land them first (afx-land.sh), then install from a clean checkout of main" >&2; exit 3
+  fi
+  if ! git -C "$SRC" merge-base --is-ancestor HEAD origin/main 2>/dev/null; then
+    echo "afx-install-claude-hooks: REFUSED: $SRC HEAD $SRC_SHA is not contained in origin/main; land the change first, then install from main" >&2; exit 3
+  fi
 fi
 mkdir -p "$DEST"
 if [ "${1:-}" != "--remove" ]; then
@@ -86,7 +100,7 @@ const d = existsSync(SETTINGS) ? JSON.parse(readFileSync(SETTINGS, "utf8")) : {}
 const where = `${DEST}/afx-where-am-i.sh --hook`;
 const policy = `node ${DEST}/afx-policy-guard.mjs`;
 const hint = `node ${DEST}/afx-local-hint.mjs`;
-const isAfx = (e) => (e.hooks || []).some((h) => /afx-guard\/(afx-where-am-i|afx-policy-guard|afx-agent-budget|afx-local-hint|afx-token-hygiene|afx-peer-limit|afx-owner-decisions-guard)/.test(h.command || ""));
+const isAfx = (e) => (e.hooks || []).some((h) => /afx-guard\/(afx-where-am-i|afx-policy-guard|afx-agent-budget|afx-local-hint|afx-token-hygiene|afx-peer-limit|afx-board-hook|afx-owner-decisions-guard)/.test(h.command || ""));
 d.hooks = d.hooks || {};
 // The Lenovo`s 2026-10-14 allforx-guard.js is retired into afx-policy-guard (same rules plus the AFX_OWNER_OK path); drop its entry.
 const isLegacy = (e) => MODE !== "--remove" && (e.hooks || []).some((h) => /[\\/]hooks[\\/]allforx-guard\.js/.test(h.command || ""));
@@ -113,6 +127,10 @@ if (MODE !== "--remove") {
   // Peer protocol (PEER_PROTOCOL.md): send-side loop limits and kill switch; agent-write guard for the owner-decisions ledger.
   add("PreToolUse", { matcher: "SendMessage", hooks: [cmd(`node ${DEST}/afx-peer-limit.mjs`, 10)] });
   add("PreToolUse", { matcher: "Bash|Write|Edit|MultiEdit|NotebookEdit", hooks: [cmd(`node ${DEST}/afx-owner-decisions-guard.mjs`, 10)] });
+  // Agent board (docs/ops/AGENT_BOARD.md): unread board messages as additional context; never blocks, fail-open, PostToolUse throttled to 45 s per session.
+  const board = `node ${DEST}/afx-board-hook.mjs`;
+  add("UserPromptSubmit", { hooks: [cmd(board, 5)] });
+  add("PostToolUse", { matcher: "Bash|Read|Edit|Write", hooks: [cmd(board, 5)] });
   add("Stop", { hooks: [cmd(policy, 20)] });
   add("SubagentStop", { hooks: [cmd(policy, 20)] });
 }

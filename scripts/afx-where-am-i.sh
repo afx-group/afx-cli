@@ -12,7 +12,7 @@
 #   DEPLOY     Replit ~/workspace                               deploy target, never edit    exit 3
 #   GATE       Replit ~/gate-* or ~/e2e-* disposable clones     gates/E2E only               exit 0
 #   SCRATCH    Claude session scratchpad                        logs/previews, never code    exit 0
-#   DOCS       AllForX/_readiness, HUMAN_ACTIONS.md, ~/.claude  coordination docs/memory     exit 0
+#   DOCS       <projects root>/_readiness, HUMAN_ACTIONS.md, ~/.claude  coordination docs/memory     exit 0
 #   HOME       $HOME itself                                     launch/coordinate, no files  exit 3
 #   BLOCKED    anything else (/tmp, Desktop, other Downloads folders, stray clones, …)     exit 2
 #
@@ -37,7 +37,7 @@ clones_root() {
   # machine.conf `root=` is the single per-machine destination (set by afx-new-mac-setup.sh).
   local mc; mc=$(sed -n 's/^root=//p' "$HOME/.claude/hooks/afx-guard/machine.conf" 2>/dev/null | head -1)
   if [ -n "$mc" ]; then echo "${mc/#\~/$HOME}"; return; fi
-  local _c   # config keys clonesRootMac / clonesRootWindows (defaults: the AFX layout; allforx-projects.json "root" on Windows)
+  local _c   # config keys clonesRootMac / clonesRootWindows (defaults: the AFX layout; afx-projects.json "root" on Windows)
   case "$OS" in
     mac) _c=$(afx_config_get clonesRootMac); echo "${_c/#\~/$HOME}" ;;
     windows) _c=$(afx_config_get clonesRootWindows); echo "${_c/#\~/$HOME}" ;;
@@ -111,6 +111,12 @@ classify() {
   case "$p/" in
     "$_afxbase/_readiness/"*|"$_afxbase/HUMAN_ACTIONS.md/"|"$HOME/.claude/"*|"$HOME/.ssh/"*)
       echo "DOCS $p — coordination docs / agent memory"; return 0 ;;
+  esac
+
+  # BRIEFS (2026-10-23): ~/.afx/briefs/ is where the coordinator keeps shared agent briefs. It holds no code and sits outside every repo, so
+  # Write/Edit there is allowed; the rest of ~/.afx (agents, locks, set-aside, ship-approvals, config) stays script-written only.
+  case "$p/" in
+    "$HOME/.afx/briefs/"*) echo "BRIEFS $p — shared agent briefs (coordination docs, no code)"; return 0 ;;
   esac
 
   if [ "$p" = "$HOME" ] || [ "$p" = "$(abspath "$HOME")" ]; then

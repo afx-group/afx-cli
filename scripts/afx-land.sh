@@ -27,7 +27,7 @@
 #   4 push        plain push of this branch, never a force (exit 6 if it is rejected)
 #   5 pull request  created or reused; an Evidence section with the literal gate command and EXIT code is written into its body
 #   6 rules       afx-pr-ready.sh --pr N must say READY: clean, Evidence with a literal EXIT 0, and none of the hard stops (secret or .env value,
-#                 destructive SQL, mass deletion of more than 200 tracked files, deploy/workflow config) unless the owner put the label `owner-ok` (exit 5)
+#                 destructive SQL without a "snapshot: <ref>" line naming an existing origin archive/ or refs/afx/ ref) unless the owner put the label `owner-ok` (exit 5)
 #   7 merge       `gh pr merge --merge` (a normal merge commit), then verify the branch tip really is in origin/<base> (exit 6)
 #   8 cleanup     delete THIS branch on the remote (never rescue/ preserve/ archive/ backup/ salvage/ prefixes); report
 # --fixes-main (2026-10-13): when afx-main-health.sh recorded that this repo's current main fails its full gate, afx-land.sh stops
@@ -47,9 +47,10 @@
 #   4b main row   (2026-10-15) the repo's main-gates.txt row is the MINIMUM gate: when --gate does not contain it, the row runs too (Replit via
 #                 afx-remote-gate.sh for a hosted repo, local otherwise) after the push; the PR Evidence names both. Gate text always runs
 #                 under `bash -o pipefail -c`; an empty or no-op gate (true, :, exit 0, echo ...) is refused unless --gate-docs-only.
-#   6b lock       (2026-10-15) a per-repo landing lock (afx-lock.sh, ~/.afx/locks/land-<repo>.lock) is held across the merge; if origin/<base>
-#                 moved meanwhile it is merged in and the whole flow re-runs under the lock (max 3 passes), so concurrent landings are
-#                 each gated against the main they will land on. Released on exit; a dead holder is reclaimed.
+#   6b lock       (2026-10-15; mode chosen per machine 2026-10-21) on a machine with under 16 GB RAM (fleet registry) a per-repo landing
+#                 lock (afx-lock.sh, ~/.afx/locks/land-<repo>.lock) is held across the merge; on 16 GB and up no lock is taken. In both
+#                 modes, if origin/<base> moved meanwhile it is merged in and the whole flow re-runs (max 3 passes), so each landing is
+#                 gated against the main it lands on. Released on exit; a dead holder is reclaimed.
 # Exit codes: 0 landed (or dry-run passed), 2 usage/preflight, 3 conflict, 4 gate failed or missing, 5 rules say not ready, 6 push/merge failed,
 #             7 --cleanup refused (the tip is not on GitHub), 8 --cleanup done on GitHub's side but the worktree folder could not be deleted
 #             (the manual command is printed; nothing is lost).
@@ -86,6 +87,25 @@ die() { code="$1"; shift; echo "afx-land: STOP ($code): $*" >&2
   case "$code" in 3|4|5|6) echo "afx-land: KEEP this worktree and branch: the commits may exist only here. Fix and re-run; remove them only with 'afx-land.sh --cleanup', which checks they are on GitHub first." >&2;; esac
   exit "$code"; }
 say() { echo "afx-land: $*"; }
+
+# Landing-lock mode (owner 2026-10-21: the lock is not a fixed rule; it follows the machine). "off" when the machine has
+# 16 GB RAM or more, "exclusive" otherwise or when the machine is unknown. RAM comes from the fleet registry
+# (registry/fleet.json, ramGb, via the registry=<key> line in machine.conf); with no registry entry, from hw.memsize.
+# AFX_LAND_LOCK=off|exclusive overrides it, and AFX_LAND_NO_LOCK=1 means off. The stale-base re-check and the
+# post-merge verification run in both modes.
+afx_land_lock_mode() {
+  [ -n "${AFX_LAND_LOCK:-}" ] && { echo "$AFX_LAND_LOCK"; return; }
+  [ -n "${AFX_LAND_NO_LOCK:-}" ] && { echo off; return; }
+  local key ram=""
+  key=$(sed -n 's/^registry=//p' "$HOME/.claude/hooks/afx-guard/machine.conf" 2>/dev/null | head -1)
+  if [ -n "$key" ] && [ -f "$_AFX_LAND_DIR/registry/fleet.json" ]; then
+    ram=$(python3 -c 'import json,sys
+print(next((str(d.get("ramGb","")) for d in json.load(open(sys.argv[2]))["devices"] if d.get("key")==sys.argv[1]), ""))' "$key" "$_AFX_LAND_DIR/registry/fleet.json" 2>/dev/null)
+  fi
+  [ -z "$ram" ] && ram=$(( $(sysctl -n hw.memsize 2>/dev/null || echo 0) / 1073741824 ))
+  case "$ram" in ''|*[!0-9]*) echo exclusive; return;; esac
+  if [ "$ram" -ge 16 ]; then echo off; else echo exclusive; fi
+}
 
 ROOT=$(git rev-parse --show-toplevel 2>/dev/null) || die 2 "not inside a git repository"
 cd "$ROOT" || die 2 "cannot enter $ROOT"
@@ -151,6 +171,12 @@ if [ "$CLEANUP" = 1 ]; then
   SA_MSG=$(afx_platform_set_aside_secrets "$ROOT") || die 7 "--cleanup refused: an env/key file in this worktree could not be copied to the set-aside folder"
   [ -n "$SA_MSG" ] && say "cleanup: $SA_MSG"
   RM_ERR=$(git worktree remove "$ROOT" 2>&1) && RM_OK=1 || RM_OK=0
+  # Gitignored leftovers (.gate-logs, build output) make the first attempt end "Directory not empty" and used to leave an ORPHAN FOLDER
+  # that needed a Finder one-liner (2026-10-23, twice). The tree is clean (checked above) and env/key files were copied aside, so a
+  # second, forced attempt can only delete ignored files.
+  if [ "$RM_OK" = 0 ] && [ -d "$ROOT" ] && [ -z "$(git -C "$ROOT" status --porcelain 2>/dev/null)" ]; then
+    git worktree remove --force "$ROOT" >/dev/null 2>&1 && RM_OK=1
+  fi
   # git can fail half way ("failed to delete ...: Directory not empty", "Permission denied" on Windows when an editor or antivirus holds a file).
   # Judge by the disk, not by the exit code: if the folder is gone the cleanup is done.
   if [ ! -d "$ROOT" ]; then REMOVED=yes; else REMOVED=no; fi
@@ -188,6 +214,14 @@ if [ -z "$SLUG" ]; then
   SLUG=$(git remote get-url origin 2>/dev/null | sed -e 's#^git@github.com:#github.com/#' -e 's#^https\{0,1\}://##' -e 's#^[^/]*@##' -e 's#^github.com/##' -e 's#\.git$##')
 fi
 [ -z "$SLUG" ] && die 2 "cannot tell owner/repo from origin; pass --slug owner/repo"
+# Gates run `pnpm install`, which can rewrite pnpm-lock.yaml (pnpm version drift). If that lockfile is the ONLY modified tracked file,
+# save its edit as a patch (nothing is lost) and restore it, so a retried landing is not blocked by generated churn (2026-10-24).
+_mod=$(git status --porcelain -uno 2>/dev/null)
+if [ -n "$_mod" ] && [ "$(printf '%s\n' "$_mod" | sed -e 's/^...//' | sort -u)" = "pnpm-lock.yaml" ]; then
+  _sa="$HOME/.afx/set-aside/$(date +%Y-%m-%d)/lockfile-churn"; mkdir -p "$_sa"
+  git diff -- pnpm-lock.yaml > "$_sa/pnpm-lock.$(date +%H%M%S).patch" 2>/dev/null
+  git checkout HEAD -- pnpm-lock.yaml >/dev/null 2>&1 && echo "afx-land: restored generated pnpm-lock.yaml churn (patch saved in $_sa)"
+fi
 [ -n "$(git status --porcelain -uno 2>/dev/null)" ] && die 2 "modified tracked files: commit or stash them first (nothing is discarded for you)"
 [ -z "$GATE" ] && [ "$DOCS_ONLY" = 0 ] && die 4 "no gate given: pass --gate \"<command>\" (or --gate-docs-only for docs). No gate, no merge."
 # A gate that proves nothing is refused (2026-10-15: gates ended in a pipe or were `true`). Every `&&`/`;`/`||` segment of the gate text
@@ -439,15 +473,19 @@ if [ "$RRC" -ne 0 ] && [ -n "${AFX_OWNER_OK:-}" ] && grep -q "label owner-ok nee
   fi
 fi
 sed 's/^/    | /' "$GATE_LOG.rules" | head -12; rm -f "$GATE_LOG.rules"
-[ "$RRC" -ne 0 ] && die 5 "rules say not ready (see above). The branch and PR #$PRN stay open; for a protected change, re-run prefixed with AFX_OWNER_OK=\"<the owner's words approving it>\" (adds the label owner-ok) or ask the owner."
+[ "$RRC" -ne 0 ] && die 5 "rules say not ready (see above). The branch and PR #$PRN stay open; only a secret/.env value or destructive SQL without a real snapshot reference stops here: fix the diff (or add a line \"snapshot: archive/<name>\" to the PR body, naming a ref that exists on origin); if it is truly intended, re-run prefixed with AFX_OWNER_OK=\"<the owner's words approving it>\"."
 
 # 6b per-repo landing lock (2026-10-15: concurrent landings were each tested before the others merged, so main went red). Only one
 # afx-land.sh per repo reaches the merge at a time (afx-lock.sh: a dead holder is reclaimed, a hung one expires). After taking it:
 # fetch; if origin/<base> moved while this run was gating or waiting, merge it in and re-run the WHOLE flow (this script re-executes
 # itself holding the lock, so the gate, the ratchet and the rules judge the code that will really be on main), at most 3 times.
-# AFX_LAND_NO_LOCK=1 skips it; AFX_LAND_LOCK_DIR, AFX_LAND_LOCK_WAIT_S and AFX_LAND_LOCK_MAX_AGE_S tune it.
-if [ -z "${AFX_LAND_NO_LOCK:-}" ]; then
-  LOCK_FILE="${AFX_LAND_LOCK_DIR:-$HOME/.afx/locks}/land-${SLUG##*/}.lock"
+# AFX_LAND_LOCK picks the mode (off|exclusive), AFX_LAND_NO_LOCK=1 means off; see afx_land_lock_mode. AFX_LAND_LOCK_DIR,
+# AFX_LAND_LOCK_WAIT_S and AFX_LAND_LOCK_MAX_AGE_S tune the exclusive lock. In "off" mode nothing is held, and the re-check
+# below still catches an origin/<base> that moved while this run gated.
+LOCK_FILE="${AFX_LAND_LOCK_DIR:-$HOME/.afx/locks}/land-${SLUG##*/}.lock"
+LAND_LOCK_MODE=$(afx_land_lock_mode)
+say "landing lock mode for ${SLUG##*/}: $LAND_LOCK_MODE (machine RAM from the fleet registry; AFX_LAND_LOCK overrides)"
+if [ "$LAND_LOCK_MODE" = exclusive ]; then
   mkdir -p "$(dirname "$LOCK_FILE")" 2>/dev/null || die 6 "cannot create the landing lock directory $(dirname "$LOCK_FILE")"
   export AFX_LOCK_FILE="$LOCK_FILE"
   AFX_LOCK_WAIT_S="${AFX_LAND_LOCK_WAIT_S:-10800}"; AFX_LOCK_MAX_AGE_S="${AFX_LAND_LOCK_MAX_AGE_S:-5400}"
@@ -459,18 +497,18 @@ if [ -z "${AFX_LAND_NO_LOCK:-}" ]; then
     afx_lock_acquire "land-${SLUG##*/}" "$BRANCH" || die 6 "could not get the landing lock for ${SLUG##*/} (another landing holds it; see above). Nothing was merged; re-run later."
     trap 'rm -f "$GATE_LOG" "$GATE_LOG.body"; afx_lock_release' EXIT
   fi
-  afx_platform_timeout 180 git fetch -q origin || die 6 "git fetch under the landing lock failed"
-  if ! git merge-base --is-ancestor "origin/$BASE" HEAD; then
-    N="${AFX_LAND_REEXEC:-0}"
-    [ "$N" -ge 3 ] && die 5 "origin/$BASE keeps moving while landing (3 re-runs). Re-run afx-land.sh when other landings settle."
-    say "origin/$BASE moved while this landing waited: merging it and re-running the gate under the lock (pass $((N+1)))"
-    if ! git merge --no-edit -q "origin/$BASE" >/dev/null 2>&1; then
-      git merge --abort >/dev/null 2>&1
-      die 3 "merge conflict with origin/$BASE under the landing lock. The merge was aborted and nothing was changed. The author resolves it, then re-run."
-    fi
-    export AFX_LAND_LOCK_HELD="$LOCK_FILE" AFX_LAND_REEXEC=$((N+1))
-    exec bash "$SELF" "${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}"
+fi
+afx_platform_timeout 180 git fetch -q origin || die 6 "git fetch failed before the merge"
+if ! git merge-base --is-ancestor "origin/$BASE" HEAD; then
+  N="${AFX_LAND_REEXEC:-0}"
+  [ "$N" -ge 3 ] && die 5 "origin/$BASE keeps moving while landing (3 re-runs). Re-run afx-land.sh when other landings settle."
+  say "origin/$BASE moved while this landing ran: merging it and re-running the gate (pass $((N+1)))"
+  if ! git merge --no-edit -q "origin/$BASE" >/dev/null 2>&1; then
+    git merge --abort >/dev/null 2>&1
+    die 3 "merge conflict with origin/$BASE. The merge was aborted and nothing was changed. The author resolves it, then re-run."
   fi
+  export AFX_LAND_LOCK_HELD="$LOCK_FILE" AFX_LAND_REEXEC=$((N+1))
+  exec bash "$SELF" "${ORIG_ARGS[@]+"${ORIG_ARGS[@]}"}"
 fi
 
 # 7 merge + verify
@@ -501,6 +539,9 @@ if [ -z "${AFX_LAND_NO_VERIFY:-}" ] && [ -x "$MH" ]; then
 fi
 say "post-merge verification: $VERIFY"
 say "LANDED: branch=$BRANCH pr=#$PRN origin/$BASE=$MERGE_SHA gate=EXIT $GRC remote-branch-deleted=$DELETED"
+# 8b guard refresh (2026-10-23): a landed change to the installed guard is useless until it is installed; afx-guard-refresh.sh does that
+# (repo-agnostic, never fails a landing, tested in afx-guard-refresh.test.sh). AFX_LAND_NO_GUARD_REFRESH=1 skips it.
+if [ -x "$_AFX_LAND_DIR/afx-guard-refresh.sh" ]; then say "$(printf '%s\n' "$CHANGED" | bash "$_AFX_LAND_DIR/afx-guard-refresh.sh" --base "$BASE" 2>&1 | tail -1)"; fi
 # 9 opt-in advisory afx-shots reminder (never gates, never changes the exit code)
 if [ "$SHOTS" = 1 ]; then
   if [ ! -f "$ROOT/shots.config.json" ]; then say "shots: --shots given but this repo has no shots.config.json: nothing to do (docs/AFX_SHOTS.md 'Adding a venture')"

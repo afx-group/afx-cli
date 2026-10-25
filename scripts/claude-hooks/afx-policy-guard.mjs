@@ -20,7 +20,7 @@ import { readFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, unlin
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
-import { join, dirname, resolve } from "node:path";
+import { join, dirname, resolve, basename } from "node:path";
 
 const HOME = homedir();
 const GUARD_DIR = dirname(fileURLToPath(import.meta.url));
@@ -29,7 +29,7 @@ const GUARD_DIR = dirname(fileURLToPath(import.meta.url));
 // move (e.g. out of ~/Downloads) changes one line and every hook follows.
 function confKey(k) { try { return readFileSync(join(GUARD_DIR, "machine.conf"), "utf8").match(new RegExp(`^${k}=(.+)$`, "m"))?.[1]?.trim().replace(/^~/, HOME) || ""; } catch { return ""; } }
 // Per-OS default when machine.conf has no root=: the Mac keeps git-only clones flat in _clones; the Lenovo is the
-// all-files master and keeps each repo inside its venture's 05_TE folder under Projects/AllForX (same as afx-where-am-i.sh).
+// all-files master and keeps each repo inside its venture's 05_TE folder under the projects root (same as afx-where-am-i.sh).
 // The per-OS default comes from the config (clonesRootWindows / clonesRootMac): $AFX_CONFIG, ~/.afx/afx.config.json, then the private
 // AFX preset next to this file if present, then the neutral built-in. Read inline (no import) so a missing file can never break the hook.
 function cfgGet(k, neutral) {
@@ -40,6 +40,12 @@ function cfgGet(k, neutral) {
 }
 export const DEFAULT_ROOT = join(HOME, cfgGet(process.platform === "win32" ? "clonesRootWindows" : "clonesRootMac", "~/afx/clones").replace(/^~[\\/]?/, ""));
 const CLONES = process.env.AFX_CLONES_ROOT || confKey("root") || DEFAULT_ROOT;
+// The folder that holds the clones folder (the "projects root") is protected from rm -rf by name, whatever the install calls it.
+export function projectsRootRe(name) {
+  if (!/^[\w .-]{2,}$/.test(name || "")) return null;
+  return new RegExp("\\brm\\s+(-\\w*r\\w*f|-\\w*f\\w*r|-r\\s+-f|-f\\s+-r)\\b[^|;&]*[/\\s\"']" + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(/|\\s|$|[\"'])");
+}
+const PROJECTS_ROOT_RE = projectsRootRe(basename(dirname(CLONES)));
 // machine.conf hub=: this machine's afx-hub clone. Flat layouts default to <root>/afx-holding-group; nested ones (Lenovo) set it.
 const HUB = process.env.AFX_HUB || confKey("hub") || join(CLONES, "afx-holding-group");
 const AFX = process.env.AFX_ROOT || dirname(CLONES);
@@ -81,8 +87,16 @@ export function guardWrite(c) {
   const withoutCheck = c.replace(/(?:\b(?:bash|sh)\s+)?[^\s;|&]*afx-install-claude-hooks\.sh\s+--check(?=\s*(?:$|[;|&]|2>&1))/g, "INSTALLER_CHECK");
   // Reading the installer is not running it. Allowed only as ONE simple read-only command with no pipe, redirect, subshell or
   // second command, so nothing can feed the file to a shell (2026-10-13: grep/wc on the installer were being blocked).
-  const readOnly = /^\s*(?:cat|head|tail|wc|grep|ls|cmp|diff|stat|file|git\s+(?:-C\s+\S+\s+)?(?:diff|log|show|blame|add))\s[^|;&$`<>()]*$/.test(c) && !/--output\b/.test(c);
-  if (!readOnly && /afx-install-claude-hooks|afx-hooks-install/.test(withoutCheck)) return "the hook installer is run only by the owner (type it with the ! prefix): agents never install or refresh the guards. Land the change in the hub and give the owner the one-line install command";
+  const READ_ONLY_HEAD = /^\s*(?:cat|head|tail|wc|grep|ls|cmp|diff|stat|file|sed\s+-n|git\s+(?:-C\s+\S+\s+)?(?:diff|log|show|blame|add))\s[^|;&$`<>()]*$/;
+  const READ_ONLY_FILTER = /^\s*(?:head|tail|wc|cut|sort|uniq|grep|nl)\b[^|;&$`<>()]*$/;
+  const segs = c.split("|");
+  const readOnly = segs.length <= 4 && READ_ONLY_HEAD.test(segs[0]) && segs.slice(1).every((x) => READ_ONLY_FILTER.test(x)) && !/--output\b/.test(c);
+  // Process improvement (owner, 2026-10-23): agents may run the installer to refresh the guard after a change has LANDED on main.
+  // Only the bare form, alone (optionally after one `cd`, optionally piped to head/tail). The installer itself refuses a source tree
+  // that is dirty or not contained in origin/main, so an agent cannot install an unreviewed guard. --remove, env prefixes, chaining
+  // and any other argument stay blocked.
+  const soleInstall = /^\s*(?:cd\s+[^\s;|&]+\s*&&\s*)?(?:(?:bash|sh)\s+)?[^\s;|&]*afx-install-claude-hooks\.sh\s*(?:2>&1)?\s*(?:\|\s*(?:tail|head)\s+-\d+\s*)?$/.test(c);
+  if (!readOnly && !soleInstall && /afx-install-claude-hooks|afx-hooks-install/.test(withoutCheck)) return "the hook installer runs only bare and alone (`bash scripts/afx-guard/afx-install-claude-hooks.sh`, from a checkout whose change has landed on origin/main); --remove, env prefixes and chaining are the owner's, typed with the ! prefix";
   for (const [path, what] of [[GUARD_PATH, "the installed guard directory (~/.claude/hooks/afx-guard) and the peer control files"], [SETTINGS_PATH, "~/.claude/settings.json"]]) {
     const redirect = new RegExp(`>>?\\s*["']?[^\\s"';|&]*${path}`);
     const verb = new RegExp(`(?:^|[;&|(]\\s*|\\bsudo\\s+|\\bxargs\\s+)${WRITE_VERB}\\b[^|;&]*${path}`);
@@ -112,6 +126,31 @@ export function guardEdit(path, ti = {}, readFile = (f) => readFileSync(f, "utf8
   try { if (hooksOf(before) !== hooksOf(after)) return "the hooks block of ~/.claude/settings.json is changed only by the owner (afx-install-claude-hooks.sh with the ! prefix). Other settings may be edited"; }
   catch { return "this edit would leave ~/.claude/settings.json unparsable, or it is unparsable now, so a change to it is blocked (the hooks block is the owner's)"; }
   return null;
+}
+
+// ── Scratch (owner 2026-10-22): repo code is not copied into the shared /tmp ───────────────
+// The shared /tmp is for logs, text output and screenshots. A source file written there is a copy of code that has a home in a repo:
+// it goes stale, nobody finds it again, and it gets re-merged by hand (2026-10-21: /private/tmp held copies of repo files, merge
+// scratch and test copies). Write the file in the worktree instead. The session scratchpad (/tmp/claude-<uid>/...) is not covered:
+// it holds the session's own helper scripts.
+const SHARED_TMP = /^(?:\/private)?\/tmp\/(?!claude-\d+\/)|^[a-z]:\/tmp\//i;
+const SOURCE_FILE = /\.(?:ts|tsx|js|jsx|mjs|cjs|sh|bash|py|swift|kt|dart|json|ya?ml|md|html?|css|sql)$/i;
+export const SCRATCH_MSG = "scratch: repo code is not copied into the shared /tmp (it goes stale and is lost). Write the file in your worktree (<repo>/.claude/worktrees/<name>). /tmp takes logs, text output and screenshots only";
+// Write/Edit: a source file whose path is under the shared /tmp.
+export function scratchCopy(path) {
+  const p = String(path || "").replace(/\\/g, "/");
+  return SHARED_TMP.test(p) && SOURCE_FILE.test(p) ? SCRATCH_MSG : null;
+}
+// Shell: a source file under the shared /tmp as the DESTINATION of cp/mv/install/ditto, a tee, or a > / >> redirect. Copying a file
+// out of /tmp into a repo is not blocked.
+export function scratchCopyBash(c) {
+  const cmd = String(c || "");
+  const dests = [];
+  for (const m of cmd.matchAll(/(?:>>?|\btee\s+(?:-a\s+)?)\s*["']?([^\s"';|&<>]+)/g)) dests.push(m[1]);
+  for (const seg of cmd.split(/[;&|]/)) {
+    if (/^\s*(?:cp|mv|install|ditto)\b/.test(seg)) { const parts = seg.trim().split(/\s+/).filter((t) => !t.startsWith("-")); if (parts.length > 2) dests.push(parts[parts.length - 1].replace(/["']/g, "")); }
+  }
+  return dests.some((d) => SHARED_TMP.test(d) && SOURCE_FILE.test(d)) ? SCRATCH_MSG : null;
 }
 
 // ── R19: model-call spend ───────────────────────────────────────────────────
@@ -152,7 +191,7 @@ export const SPEND_BLOCK = "R19 (strict mode, opted in by the owner in machine.c
 export function spendCheck(c, dir = cwd, io = defaultSpendIo, approvedNow = () => { try { return approvalState(readFileSync(SPEND_APPROVALS, "utf8"), "spend"); } catch { return false; } }) {
   const direct = spendCall(c);
   let script = null;
-  for (const ref of (c.match(SCRIPT_REF) || []).slice(0, 6)) {
+  for (const ref of (c.match(SCRIPT_REF) || []).filter((r) => executesRef(c, r)).slice(0, 6)) {
     try {
       const f = expandPath(ref, dir);
       if (io.exists(f) && spendCall(stripComments(io.read(f)))) { script = ref; break; }
@@ -221,11 +260,19 @@ export function scriptLoopSize(text) {
   return loopSize(headers.join("\n"));
 }
 export const declaredLoop = (c) => { const m = c.match(/\[loop-ok:(\d+)\]|AFX_LOOP_OK=(\d+)|--loop-ok[= ](\d+)/); return m ? Number(m[1] || m[2] || m[3]) : 0; };
+// A script named in the command only matters for R19 when the command RUNS it. Reading it (grep, sed -n, cat, diff, git add) does not
+// start model calls even if the file's text mentions a model call (false positive 2026-10-23: grepping the guard's own source).
+const RUNS = "(?:bash|sh|zsh|node|python3?|tsx|pwsh|powershell|source|exec|nohup|xargs|time|env|sudo|timeout\\s+\\d+)";
+export function executesRef(c, ref) {
+  const esc = ref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  c = c.replace(/\b(?:node\s+--check|node\s+-c|(?:ba)?sh\s+-n)\s+\S+/g, " "); // a syntax check parses the file, it does not run it
+  return new RegExp(`(?:^[ \\t]*|[;&|(]\\s*|\\b${RUNS}\\s+(?:-\\S+\\s+)*)["']?${esc}(?![\\w.-])`, "im").test(c);
+}
 // null (no model calls in a loop), { loop } (fine: small, or declared) or { loopBlock }.
 export function loopCheck(c, dir = cwd, io = defaultSpendIo, max = 10) {
   const direct = spendCall(c);
   let scriptText = null;
-  for (const ref of (c.match(SCRIPT_REF) || []).slice(0, 6)) {
+  for (const ref of (c.match(SCRIPT_REF) || []).filter((r) => executesRef(c, r)).slice(0, 6)) {
     try { const f = expandPath(ref, dir); if (io.exists(f)) { const t = stripComments(io.read(f)); if (spendCall(t)) { scriptText = t; break; } } } catch { /* unreadable */ }
   }
   if (!direct && scriptText === null) return null;
@@ -258,6 +305,26 @@ const BASH_LIKE = /^(Bash|PowerShell)$/;
 export const isShellTool = (t) => BASH_LIKE.test(t || "");
 
 // ── Bash ────────────────────────────────────────────────────────────────────
+// Package manager of the project at `dir`: the nearest afx.config.json up the tree (`packageManager`), else pnpm (the AFX default).
+// Read inline, never throws: a missing or broken file can not break the hook.
+const PMS = ["npm", "pnpm", "yarn", "bun"];
+export function projectPm(dir) {
+  let d = resolve(dir || ".");
+  for (let i = 0; i < 12; i++) {
+    const f = join(d, "afx.config.json");
+    if (existsSync(f)) { try { const v = JSON.parse(readFileSync(f, "utf8")).packageManager; if (PMS.includes(v)) return v; } catch {} return "pnpm"; }
+    const up = dirname(d);
+    if (up === d) break;
+    d = up;
+  }
+  return "pnpm";
+}
+const PM_INSTALL = {
+  npm: /(^|[;&|]\s*)npm\s+(install|i|ci|add)\b/,
+  yarn: /(^|[;&|]\s*)yarn(\s+(install|add)\b|\s*$)/,
+  pnpm: /(^|[;&|]\s*)pnpm\s+(install|i|add)\b/,
+};
+
 export function checkBash(cmd, dir = cwd) {
   const c = stripMessageArgs(stripDataHeredocs(cmd)).replace(/\\\n/g, " ");
   // R18: only the owner grants model approvals (their typed prompt or a `!` command, neither of
@@ -304,9 +371,9 @@ export function checkBash(cmd, dir = cwd) {
   // Ad-hoc ssh to a Replit workspace: read-only probes are fine; anything that writes, runs code or touches
   // git state must go through afx-remote-ops.sh / afx-remote-gate.sh (ledger, locks, dry-run, masking).
   const adhocSsh = /(^|[;&|]\s*|&&\s*)(\S*\/)?ssh\b[^\n]*?(replit\.dev|\.ssh\/replit)/m.test(c);
-  if (adhocSsh) {
+  if (adhocSsh && !allowlistedProbe(c)) {
     const w = adhocSshWrite(c);
-    if (w) return { block: `ad-hoc ssh to a Replit workspace may not ${w}. Use scripts/afx-guard/afx-remote-ops.sh <venture> <verb> (status|sync|install|migrate-plan|migrate-apply|test|restart|health|logs|align-main; mutating verbs are dry-run until --apply) or afx-remote-gate.sh for gates. See docs/REPLIT_SSH_OPS.md` };
+    if (w) return { block: `ad-hoc ssh to a Replit workspace may not ${w}. Use scripts/afx-guard/afx-remote-ops.sh <venture> <verb> (status|sync|install|migrate-plan|migrate-apply|test|restart|health|logs|align-main; mutating verbs are dry-run until --apply) afx-remote-ops.sh <venture> probe <name> for a named read-only probe (list: registry/remote-probes.txt), or afx-remote-gate.sh for gates. See docs/REPLIT_SSH_OPS.md` };
   }
   const rules = [
     [/\bgit\b[^|;&]*\bpush\b[^|;&]*(\s--force(-with-lease)?\b|\s-f\b|\s\+\S+)/, "force-push needs the owner's explicit OK (push a new branch instead)"],
@@ -316,14 +383,14 @@ export function checkBash(cmd, dir = cwd) {
     [/\bgit\b[^|;&]*\bstash\s+(drop|clear)\b/, "git stash drop/clear needs the owner's explicit OK (other sessions share the stash stack)"],
     [/\bgit\s+(-C\s+("[^"]+"|\S+)\s+)?(gc|prune)\b/, "git gc/prune needs the owner's explicit OK"],
     [/\bgit\s+(clone|init)\b/, "git clone/init needs the owner's explicit OK (one clone per repo, in _clones)"],
-    // Ported 2026-10-20 from the Lenovo's legacy ~/.claude/hooks/allforx-guard.js (retired into this guard, which has
+    // Ported 2026-10-20 from the Lenovo's legacy per-machine guard hook (retired into this guard, which has
     // the AFX_OWNER_OK path that one lacked). Its `git worktree prune` block is not ported: hub cleanup prints and runs it.
     [/\bgit\b[^|;&]*\bpush\b[^|;&]*\s(\S*:(refs\/heads\/)?(main|master)|(main|master))(\s|$)/, "main changes only through a PR landed with afx-land.sh, never a direct push"],
     [/\bgit\b[^|;&]*\badd\s+(-A|--all|\.)(\s|$)/, "stage explicit paths, never `git add -A` / `git add .` (sibling worktrees and archives get committed)"],
     [/--no-verify\b/, "never skip hooks (--no-verify)"],
-    [/\bgit\b[^|;&]*\badd\b[^|;&]*(^|\s|\/)\.env(\.\w+)?(\s|$)/, "never stage a .env file"],
-    [/\brm\s+(-\w*r\w*f|-\w*f\w*r|-r\s+-f|-f\s+-r)\b[^|;&]*(_clones|\.claude\/worktrees|AllForX|\s~\/?(\s|$)|\s\$HOME\/?(\s|$))/, "never rm -rf a clone/worktree/AllForX path: prove it's on GitHub, then move it to the Trash"],
-    [/(^|[;&|]\s*)(npm\s+(install|i|ci|add)\b|yarn(\s+(install|add)\b|\s*$))/, "AFX is pnpm-only (npm/yarn create duplicate caches and lockfiles)"],
+    [/\bgit\b[^|;&]*\badd\b[^|;&]*(^|\s|\/)\.env(?:\.(?!(?:example|sample|template)(?:\s|$))\w+)?(\s|$)/, "never stage a .env file (template files .env.example, .env.sample and .env.template are allowed)"],
+    [/\brm\s+(-\w*r\w*f|-\w*f\w*r|-r\s+-f|-f\s+-r)\b[^|;&]*(_clones|\.claude\/worktrees|\s~\/?(\s|$)|\s\$HOME\/?(\s|$))/, "never rm -rf a clone/worktree/projects-root path: prove it's on GitHub, then move it to the Trash"],
+    ...(PROJECTS_ROOT_RE ? [[PROJECTS_ROOT_RE, "never rm -rf a clone/worktree/projects-root path: prove it's on GitHub, then move it to the Trash"]] : []),
     // Only match the keyword at a COMMAND position — statement start, after ;&|, after a path
     // separator (scripts/gate.sh, ./verify.sh), or after a runner (pnpm/npm/yarn/npx/make/bash/sh/
     // node [run]) — so an incidental keyword in a branch name or flag (e.g. `-b remote-gate-x`, a
@@ -339,12 +406,16 @@ export function checkBash(cmd, dir = cwd) {
   ];
   if (!remoteOnly || adhocSsh) {
     for (const [re, why] of rules) if (re.test(c)) return { block: why };
+    const pm = projectPm(dir);
+    for (const m of Object.keys(PM_INSTALL)) {
+      if (m !== pm && PM_INSTALL[m].test(c)) return { block: `this project uses ${pm} only (${m} creates duplicate caches and lockfiles)${pm === "pnpm" ? "; AFX is pnpm-only" : ""}` };
+    }
     const del = projectsRecursiveDelete(c);
     if (del) return { block: del };
     const wt = c.match(/\bgit\b[^|;&]*\bworktree\s+add\s+(?:-[bB]\s+\S+\s+|--?[a-zA-Z-]+\s+)*("[^"]+"|\S+)/);
     if (wt) {
       // Resolve "$VAR"/${VAR} from an assignment earlier in the same command (reported by
-      // allforx-bf: `WT=…/.claude/worktrees/x; git worktree add "$WT"` was wrongly blocked).
+      // reported by a peer session: `WT=…/.claude/worktrees/x; git worktree add "$WT"` was wrongly blocked).
       // A variable we can't see is allowed: the sweep's fragment audit catches stray worktrees.
       let path = wt[1].replace(/^["']|["']$/g, "");
       const v = path.match(/^\$\{?(\w+)\}?(.*)$/);
@@ -357,7 +428,9 @@ export function checkBash(cmd, dir = cwd) {
   }
   // Heavy local work: preflight + freeze (R17). Remote gates are exempt.
   const heavy = /(^|[;&|]\s*|\s)(pnpm\s+(install|i|add|(run\s+)?(typecheck|build|test))\b|tsc\b(?!\s+--version)|xcodebuild\b|pod\s+install\b|(npx\s+)?expo\s+(export|prebuild|run:ios|run:android)\b|eas\s+build\b)/;
-  if (!remoteOnly && heavy.test(c)) {
+  const pmName = projectPm(dir);
+  const heavyRe = pmName === "pnpm" ? heavy : new RegExp(heavy.source.replace("pnpm\\s+", `(?:pnpm|${pmName})\\s+`));
+  if (!remoteOnly && heavyRe.test(c)) {
     // Per-machine policy (~/.claude/hooks/afx-guard/machine.conf, written by afx-new-mac-setup.sh):
     //   heavy_local=ship-only  (default on macOS: the 8 GB Mac is reserved for Xcode ships)
     //   heavy_local=preflight  (e.g. the 64 GB MacBook Pro: allowed when afx-preflight.sh passes)
@@ -403,6 +476,32 @@ export function checkBash(cmd, dir = cwd) {
   return {};
 }
 
+
+// Named read-only probes (registry/remote-probes.txt; installed as remote-probes.txt next to this hook). `name | command`, exact match.
+export function parseProbes(text) {
+  const out = new Map();
+  for (const line of String(text || "").split("\n")) {
+    const t = line.trim(); if (!t || t.startsWith("#")) continue;
+    const i = t.indexOf("|"); if (i < 1) continue;
+    const name = t.slice(0, i).trim(), cmd = t.slice(i + 1).trim().replace(/\s+/g, " ");
+    if (/^[a-z0-9-]+$/.test(name) && cmd) out.set(name, cmd);
+  }
+  return out;
+}
+function readProbesFile() {
+  for (const f of [join(GUARD_DIR, "remote-probes.txt"), join(GUARD_DIR, "..", "registry", "remote-probes.txt")]) { try { return readFileSync(f, "utf8"); } catch {} }
+  return "";
+}
+// True only when the WHOLE command is `ssh [-i key] [-o opt] <host> '<one allowlisted probe command>'`: nothing before, nothing chained after.
+// A double-quoted command containing $ or a backtick is refused (the local shell would expand it before the repl sees it).
+export function allowlistedProbe(c, probesText) {
+  const probes = new Set(parseProbes(probesText ?? readProbesFile()).values());
+  if (!probes.size) return false;
+  const m = String(c).trim().match(/^(?:\S*\/)?ssh((?:\s+(?:-[io]\s+\S+|-[A-Za-z]))*)\s+([^\s'"-]\S*)\s+(?:'([^'\n]*)'|"([^"\n$`\\]*)")\s*(?:2>&1)?$/);
+  if (!m) return false;
+  if (!/replit\.dev|\.ssh\/replit/.test(m[1] + " " + m[2])) return false;
+  return probes.has((m[3] ?? m[4]).trim().replace(/\s+/g, " "));
+}
 
 // What an ad-hoc `ssh <replit>` command is trying to do that only the sanctioned tools may do. Returns a short
 // description or null for a read-only probe. Deliberately blunt: a false positive costs one switch to afx-remote-ops.
@@ -461,7 +560,7 @@ function logOwnerPrompt(p) {
 // from ~/Downloads, but a session hook runs with the user's own disk access, so this catches it on
 // EVERY session start, every machine. Cheap: shallow find over known spots, short timeout.
 export function findStrayDestinations(clones = CLONES) {
-  const canon = resolve(dirname(clones)); // the one AllForX root
+  const canon = resolve(dirname(clones)); // the one projects root
   const spots = ["Downloads", "Desktop", "Documents", "Development", "Developer", "code", "Code", "Projects", "projects", "src", "dev", "work", "repos"]
     .map((d) => join(HOME, d)).concat(["/tmp", "/private/tmp"]);
   const found = new Set();
@@ -477,7 +576,7 @@ export function findStrayDestinations(clones = CLONES) {
   return [...found];
 }
 
-// Recursive delete under ~/Projects (rm -r, Remove-Item -Recurse, rd/rmdir /s), ported from allforx-guard.js. Build
+// Recursive delete under ~/Projects (rm -r, Remove-Item -Recurse, rd/rmdir /s), ported from the legacy per-machine guardrd.js. Build
 // output (node_modules, dist, ...) stays deletable: the owner OK'd removing regenerable folders (2026-10-20).
 const SAFE_DELETE = new Set(["node_modules", "dist", "build", ".next", ".expo", ".turbo", ".cache", "coverage", "out", ".vite", ".parcel-cache", "__pycache__", ".pytest_cache", "tmp", "temp", ".tsbuildinfo"]);
 export function projectsRecursiveDelete(c) {
@@ -805,6 +904,7 @@ if (IS_MAIN) {
   let r = {};
   if (event === "PreToolUse" && isShellTool(tool)) {
     r = checkBash(ti.command || "");
+    if (!r.block) { const sb = scratchCopyBash(ti.command || ""); if (sb) r = { block: sb }; }
     if (r.override) { log(join(READINESS, "OVERRIDES.log"), `${stamp()} ${cwd} :: ${String(ti.command).slice(0, 300)}`); r = {}; }
   } else if (event === "PreToolUse" && (tool === "Agent" || tool === "Task")) {
     r = checkAgent(ti);
@@ -839,7 +939,8 @@ if (IS_MAIN) {
   } else if (event === "PreToolUse" && /^(Write|Edit|MultiEdit)$/.test(tool)) {
     const text = ti.content ?? ti.new_string ?? (Array.isArray(ti.edits) ? ti.edits.map((e) => e.new_string).join("\n") : "");
     const ge = guardEdit(ti.file_path, ti);
-    r = ge ? { block: ge } : checkContent(ti.file_path, text);
+    const sc = scratchCopy(ti.file_path);
+    r = ge ? { block: ge } : sc ? { block: sc } : checkContent(ti.file_path, text);
   } else if (event === "PostToolUse" && /^(Write|Edit|MultiEdit)$/.test(tool)) {
     if (/(CHANGELOG|RELEASE_CLAIMS_LEDGER|release[-_]notes|WHAT_TO_TEST|testflight[-_]notes)/i.test(ti.file_path || "")) {
       process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: "AFX release-claims rule: load the afx-release-claims skill. Every changelog / What-to-Test line needs a matching RELEASE_CLAIMS_LEDGER row with E2E evidence from this session; no 'New' without a live server." } }));

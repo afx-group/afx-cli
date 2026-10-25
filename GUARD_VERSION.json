@@ -1,9 +1,9 @@
 {
  "name": "afx-cli",
  "tier": "core",
- "version": "0.1.2",
- "hubSha": "unknown",
- "fileCount": 77,
+ "version": "0.1.3",
+ "hubSha": "487420048806",
+ "fileCount": 81,
  "installerFiles": [
   "afx-platform.sh",
   "afx-config.mjs",
@@ -29,18 +29,18 @@
  "files": [
   {
    "path": "README.md",
-   "bytes": 3668,
-   "sha256": "3ed5810d7e191f3a578c3b57cd1cedf275d98109519f60652922cc0d8aed93da"
+   "bytes": 5972,
+   "sha256": "2a4a59481081f3375bb2902af699384b27601fc09ab4f7a74287022fc58baa1f"
   },
   {
    "path": "afx",
-   "bytes": 11214,
-   "sha256": "be2756c7f0deff629d12e2d0499b6e25ccef2df72bec0718ce0b2e31d8fada41"
+   "bytes": 15433,
+   "sha256": "1f30321d9dc2456ac3e608d00475e5ceb39aef18fc932fb517010fb567088c2b"
   },
   {
    "path": "afx-agent-rules-rollout.sh",
-   "bytes": 5919,
-   "sha256": "1b431ff1735183265f82a8c964d5e94129dac102f308a3bec7a25c8bdfcef525"
+   "bytes": 6857,
+   "sha256": "3c683bfb1aff624a8ca9d367f7af6346051641e75fb1e97c3817e2761197e756"
   },
   {
    "path": "afx-agent-rules-sync.sh",
@@ -64,13 +64,13 @@
   },
   {
    "path": "afx-bootstrap.sh",
-   "bytes": 7412,
-   "sha256": "120e187290a3cbd5fb6104a6f7db4121069add3c474c7c930e9220578a1ec02a"
+   "bytes": 8007,
+   "sha256": "631bac721fc4b7f9b5ea6af5244f8e0194f2d1c310752112816bd0fe8b6f5787"
   },
   {
    "path": "afx-branch-census.sh",
-   "bytes": 14487,
-   "sha256": "9074727a9f773390b0b9548b198307abb9b3a71811f6b530a39235bee290b4f8"
+   "bytes": 14632,
+   "sha256": "d6093276a5ef5245c2f83d5519c51ebbbcf69f266c86b2bb538b30e10c73cb79"
   },
   {
    "path": "afx-bundle-safety-lint.sh",
@@ -84,13 +84,18 @@
   },
   {
    "path": "afx-config-defaults.sh",
-   "bytes": 1127,
-   "sha256": "a3968990b9b4ad41beac57bd92b4dbd04e991316cffdc11c2105c6563e189be9"
+   "bytes": 1123,
+   "sha256": "a6ebc28150b074cb571058bb3beb73dc67418de88b83f9d9e60c3d311372a655"
   },
   {
    "path": "afx-config.mjs",
-   "bytes": 9179,
-   "sha256": "2b62a9c7dba16bcd7fb6dbf8cce311c5d3b9df1b4e4e709bd944a8d8c8f81d02"
+   "bytes": 9112,
+   "sha256": "89894c23c33f4eff2e9914cafd2f96662add5cc1238fc248522867ad97f686f5"
+  },
+  {
+   "path": "afx-customer-demo-proof.sh",
+   "bytes": 2220,
+   "sha256": "60e7f2f3517b8d1c8a9108745ee42cc7ffdab2d881ea100e7cb1e1d9660e75b4"
   },
   {
    "path": "afx-digest.mjs",
@@ -101,6 +106,11 @@
    "path": "afx-doc-drift.sh",
    "bytes": 4555,
    "sha256": "ea9ebecf45bfa283b1ac5ed5a64b05da831ba4e2de5592e8187f6c31d030d25b"
+  },
+  {
+   "path": "afx-entitlement.mjs",
+   "bytes": 9200,
+   "sha256": "e17526f8e7af536abc924a08ccab2f4a81e30becadd4e3d7ee9218d425ff5522"
   },
   {
    "path": "afx-fake-data-lint.sh",
@@ -114,8 +124,8 @@
   },
   {
    "path": "afx-fragment-audit.sh",
-   "bytes": 4802,
-   "sha256": "718cd4b28328d1a0ecfd2f393d358404f1726b3bed73ef538d32827ae3b904b2"
+   "bytes": 4790,
+   "sha256": "12ed421823c15f44a514378ceb36b686e31f8a67ac53e768099cd951f4da8db0"
   },
   {
    "path": "afx-freeze.sh",
@@ -134,8 +144,8 @@
   },
   {
    "path": "afx-gate-slots.sh",
-   "bytes": 1979,
-   "sha256": "c6729b11c499abe7419389a81f00270e1a8a765bf64605150c7f16155911d07e"
+   "bytes": 3135,
+   "sha256": "1dbc20d81440401b3bcbf82e79c4908aea0c90427083dab3820d71f84c5eccae"
   },
   {
    "path": "afx-git-janitor.sh",
@@ -154,13 +164,13 @@
   },
   {
    "path": "afx-install-claude-hooks.sh",
-   "bytes": 10676,
-   "sha256": "bbd020ad0833719dfc89989b7a6bf5859ce6b0a36f60969d2158f344b0ea3530"
+   "bytes": 12323,
+   "sha256": "fdf9096dcb052514750d704f1636a81090d4685c2983c0835034938f8b164774"
   },
   {
    "path": "afx-land.sh",
-   "bytes": 41785,
-   "sha256": "675c1de47a5c69684382004b88df1046a926a1cb909d07d3e020998b1de3eb13"
+   "bytes": 45300,
+   "sha256": "de83bd62bb280dc6bd26d627d929f80d329d121c7863f29187f8ceb5baba7277"
   },
   {
    "path": "afx-lint-guard-scripts.allow",
@@ -198,14 +208,19 @@
    "sha256": "711d28bb78a501f20b5c580f2deb4eda7b6a166920026ed0ad421ace54d8a546"
   },
   {
+   "path": "afx-pack.mjs",
+   "bytes": 7734,
+   "sha256": "0cd9ddcdfbc1e347df093bb3273f7a41534251930fc006e266e66b2f8663245d"
+  },
+  {
    "path": "afx-platform.sh",
    "bytes": 18219,
    "sha256": "8328dd461c4b00587e8cf0ae8ee453ae2dcec2922fd444395ea90c706a0e3265"
   },
   {
    "path": "afx-pr-ready.sh",
-   "bytes": 14857,
-   "sha256": "aedfcea2ff4e0ad68f867975533b14f9dcf7fafa127ce359f2715ec59fc2c7e3"
+   "bytes": 16479,
+   "sha256": "b6520eebca3c033302335f9466fadbabbb832c561d0310f1606b6d670fe4ee6f"
   },
   {
    "path": "afx-preflight.sh",
@@ -216,6 +231,16 @@
    "path": "afx-preserve-all.sh",
    "bytes": 7812,
    "sha256": "7fbf8e75e0719fc0da5d318c72d7e809aae5758253148944bdf878d317788726"
+  },
+  {
+   "path": "afx-project.mjs",
+   "bytes": 20316,
+   "sha256": "0e1e902fbae1fad54217a47bcc816471d1e5415a9266248b8e56808d87975a2c"
+  },
+  {
+   "path": "afx-projects.example.json",
+   "bytes": 1213,
+   "sha256": "915423cdad670b83752c8f827c0940f88ec857f3914c1668500e84fac76a4fac"
   },
   {
    "path": "afx-propagate.sh",
@@ -249,18 +274,18 @@
   },
   {
    "path": "afx-sweep.sh",
-   "bytes": 11940,
-   "sha256": "31e1379ad5fbccae19051c247fecd6ff0d8f837ce0b0715771e5bb6eb4c1ccb1"
+   "bytes": 12898,
+   "sha256": "5f6f67c411396884c7efadccff965a5baf21f4e29d118b139f55e492239520e7"
   },
   {
    "path": "afx-sync-clones.sh",
-   "bytes": 7483,
-   "sha256": "ddd2ab33abdf44984d7b285f466c623f240348be8ef323417f523b299d69f8fe"
+   "bytes": 7566,
+   "sha256": "6d918cc03dcadbd81908eb1dbe5b3fc85e3c58a6b76aafd68362df25bd99401b"
   },
   {
    "path": "afx-terminal-agent-launcher.sh",
-   "bytes": 9956,
-   "sha256": "a39204f7714b3f53322e6a24ea0ac98785ecc4f46a80f3b2b73e2b854f89aa21"
+   "bytes": 9973,
+   "sha256": "efde86078a731b409e188af49ddf5ae5397cb2f85040f3d2aaad9e187691049d"
   },
   {
    "path": "afx-vendored-drift-lint.sh",
@@ -269,8 +294,8 @@
   },
   {
    "path": "afx-where-am-i.sh",
-   "bytes": 9615,
-   "sha256": "b3f2205ced7481139d95f29e7b1ae6db4c75005c042da519b1625159fa5bffeb"
+   "bytes": 10024,
+   "sha256": "345826af8501cdab5886a8e5a67395023429e37ec072fc30970aa89f3772dfc2"
   },
   {
    "path": "afx-workspace-guard.sh",
@@ -289,8 +314,8 @@
   },
   {
    "path": "afx.config.schema.json",
-   "bytes": 2310,
-   "sha256": "fb01cc875697670bd0fa1f513bfc2cc4efda4466cdb75e2dfdb510d7f5ea2dc5"
+   "bytes": 2306,
+   "sha256": "de8b0d629727b27cc3048cf7cd4f956dc37cdddf229a33bde5ecfaf2a25c42cb"
   },
   {
    "path": "agent-rules/afx-agent-rules.default.md",
@@ -298,19 +323,19 @@
    "sha256": "9cc732fe265c38b63dd30e97a6db26be6dc6c0df67eee9431a6ce628bf82b0d3"
   },
   {
+   "path": "agent-rules/brief-rules.default.txt",
+   "bytes": 550,
+   "sha256": "c3dc35a3df6c092d0e8cca61ca9005e3b694a402ad9480736ba2e270204cc4ce"
+  },
+  {
    "path": "aider-model-settings.yml",
    "bytes": 433,
    "sha256": "3172a39699173f8e45fcab23dd276dbcb73fcc960cfe5204568e4ef438b85701"
   },
   {
-   "path": "allforx-projects.example.json",
-   "bytes": 1213,
-   "sha256": "915423cdad670b83752c8f827c0940f88ec857f3914c1668500e84fac76a4fac"
-  },
-  {
    "path": "claude-hooks/afx-agent-budget.mjs",
-   "bytes": 12183,
-   "sha256": "b218ad457b4890b2abb4d8649bdcad211d33a1e05303bb13f176bb7143f8f8e5"
+   "bytes": 14044,
+   "sha256": "3a0bb5caa2bca1f368c881a6ccbb2d20bb537bf96bc15afbe214d1bf416148c2"
   },
   {
    "path": "claude-hooks/afx-local-hint.mjs",
@@ -319,8 +344,8 @@
   },
   {
    "path": "claude-hooks/afx-policy-guard.mjs",
-   "bytes": 70374,
-   "sha256": "bb8a1557d43bfea8f65e1887509f8ee34d6d9427af97e604c1f7b0bfda3f467e"
+   "bytes": 77642,
+   "sha256": "cd7bae675c0ae93d90d39c4edb8922cc06c41542355e631e236fedfc18963ea5"
   },
   {
    "path": "claude-hooks/afx-statusline.sh",
@@ -353,6 +378,11 @@
    "sha256": "5f7ac2e6aba7a876bf68334440b010c6a516e6e7c287ee473de5458d62ce1292"
   },
   {
+   "path": "license-public-key.pem",
+   "bytes": 113,
+   "sha256": "e1a40ebb69310d972cedef5739cdfb1a942964140b9884ec3e88c57cc98968c5"
+  },
+  {
    "path": "pnpm-denylist.txt",
    "bytes": 586,
    "sha256": "35db3fff292132693b43a68f8eb53861fe82b3c487f1330ed34568837af19a91"
@@ -363,19 +393,9 @@
    "sha256": "7618654b938a6be3b5416bc04b522b2409fea2d8f33fbdda38dd71ab391aa634"
   },
   {
-   "path": "windows/Open-AllForX.cmd",
-   "bytes": 153,
-   "sha256": "e401466740a31dbe89c407940618e10bdeaa631d87cad1b85b1d45347d810096"
-  },
-  {
-   "path": "windows/Open-AllForX.ps1",
-   "bytes": 634,
-   "sha256": "b1fa6055af2cc9ec7963bcb16052c01ef23a905294a49c06de80f4bb55e11e4c"
-  },
-  {
    "path": "windows/README.md",
-   "bytes": 10091,
-   "sha256": "8e045d54245eb0ef73aefc3d9428b37ff31690d59dc9a945b7fdce85ad521463"
+   "bytes": 10044,
+   "sha256": "8083d099e24a1233e6dfe8edb823dbd6720fe9fb8d04e7def41287767d5be583"
   },
   {
    "path": "windows/afx-preflight.ps1",
@@ -389,8 +409,8 @@
   },
   {
    "path": "windows/afx-sweep-task.ps1",
-   "bytes": 6399,
-   "sha256": "f0d40af7ac1b6acbf87226c8c24eeb2974100ecee8bca2e5babf20a908a75a1b"
+   "bytes": 6622,
+   "sha256": "b5587e351cc40f557901c87e6cd4b23edb196bd5a665901a74976b095da85fe4"
   },
   {
    "path": "windows/afx-terminal-agent-launcher.cmd",
@@ -399,8 +419,8 @@
   },
   {
    "path": "windows/afx-terminal-agent-launcher.ps1",
-   "bytes": 10414,
-   "sha256": "3c41ce1bc0c91de559b0321c0acce382307f26cfc4a3d7757344c98e6dcc59a9"
+   "bytes": 10504,
+   "sha256": "56bde6a7c419ab401e71f9810b44a003c076f8f146dfe697e8562d47f1199a96"
   },
   {
    "path": "windows/afx-worktree-remove.ps1",

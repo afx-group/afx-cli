@@ -4,11 +4,11 @@ Inventory taken 2026-09-27 from the Lenovo Windows PC, for the Mac/Linux parity 
 (portable guard scripts + Windows equivalents). This directory holds copies of what
 exists; the live originals stay machine-local at `C:\Users\you\Projects\`.
 
-## 1. Session launcher: `afx-terminal-agent-launcher.ps1` (old names `Open-AllForX.ps1` / `Open-AllForX.cmd` are forwarding shims)
+## 1. Session launcher: `afx-terminal-agent-launcher.ps1` (older launcher names are forwarding shims on machines that had them)
 
 The one way sessions are supposed to start on this machine. Copied verbatim in this
 directory. Behavior:
-- Reads `allforx-projects.json` (schema below) as the single source of truth for every
+- Reads `afx-projects.json` (schema below) as the single source of truth for every
   project's canonical path.
 - Before opening anything: verifies the canonical path has a `.git` dir, verifies
   `origin`'s remote URL actually matches the expected `owner/repo` slug (catches a wrong
@@ -29,7 +29,7 @@ directory. Behavior:
 a folder directly, bypassing all of the above checks. There's no enforcement, only a
 documented convention.
 
-## 2. `allforx-projects.json` schema (kept machine-local by design, see note below)
+## 2. `afx-projects.json` schema (kept machine-local by design, see note below)
 
 One entry per project:
 ```json
@@ -55,7 +55,7 @@ frequently-edited, single-owner-updated source of truth (paths move, projects pa
 notes get added) — putting a copy in git would create a second copy that immediately
 starts drifting from the real one. If a portable/parity version is wanted, treat this
 schema block as the spec and generate a machine-appropriate equivalent (e.g. a
-`~/Projects/AllForX/allforx-projects.json` with Mac paths) rather than syncing the
+`~/Projects/afx-projects.json` with Mac paths) rather than syncing the
 Windows file's actual content.
 
 ## 3. Long paths and line endings
@@ -74,7 +74,7 @@ Windows file's actual content.
 
 ## 4. No Windows Task Scheduler automation
 
-Checked `schtasks /query /fo LIST /v` for anything AFX/AllForX/HTR/claude-related:
+Checked `schtasks /query /fo LIST /v` for anything AFX/claude-related:
 **none found.** Nothing on this machine runs on a schedule outside an active Claude Code
 session. Any "daily digest" / "weekly hub sync" cadence described in this repo's own
 `STANDING_AGENT_ROSTER_OPERATIONS.md` is manual/session-triggered here, not
@@ -97,7 +97,7 @@ required "land findings as a docs PR" rule) rather than leaving this as the defa
 `git config --global --get-all safe.directory` returned dozens of entries under
 `C:/afx/...` (scratch sync folders, `lockfix/<repo>` for at
 least 9 different repos, and more) — `C:\afx` is explicitly on this machine's own forbidden-path list
-(`allforx-projects.json`'s `neverWorkIn`, and the global CLAUDE.md) precisely because
+(`afx-projects.json`'s `neverWorkIn`, and the global CLAUDE.md) precisely because
 past sessions cloned/worked there before that rule existed. **Checked: `C:\afx` no
 longer exists on disk** (confirmed via direct `ls`), so this is stale git config
 metadata, not an active disk-usage or rule-violation issue today — but it's a real
@@ -157,8 +157,8 @@ All of "suggested... not yet built" above is now built, in this folder:
   when run under Git Bash (its `afx_platform_os` branch already recognizes
   Windows/MSYS and applies the same `C:\afx` pattern check).
 - `afx-terminal-agent-launcher.sh` (macOS/Linux port of `afx-terminal-agent-launcher.ps1`; `afx-open.sh` is a shim) lives in `../` and
-  shares this folder's `allforx-projects.example.json` schema — see that
+  shares this folder's `afx-projects.example.json` schema — see that
   file for the one-schema-three-machines convention and why the *live*
-  `allforx-projects.json` is deliberately never committed.
+  `afx-projects.json` is deliberately never committed.
 - See `docs/sdlc-playbook/AFX_PLATFORM_PARITY.md` (hub repo) for the full
   parity matrix and the exact validation checklist to run on this machine.

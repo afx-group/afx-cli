@@ -12,7 +12,7 @@
     "hubRepo": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$", "default": "", "description": "owner/repo of the repo that holds the guard scripts; afx-bootstrap.sh fetches from it." },
     "clonesRootMac": { "type": "string", "minLength": 1, "default": "~/afx/clones", "description": "Where project clones live on macOS. A leading ~ is your home folder." },
     "clonesRootWindows": { "type": "string", "minLength": 1, "default": "~/afx/clones", "description": "Where project clones live on Windows (Git Bash)." },
-    "registryFile": { "type": "string", "minLength": 1, "default": "~/.afx/allforx-projects.json", "description": "The project registry (key, path, name per project)." },
+    "registryFile": { "type": "string", "minLength": 1, "default": "~/.afx/afx-projects.json", "description": "The project registry (key, path, name per project)." },
     "brand": { "type": "string", "minLength": 1, "default": "AFX CLI", "description": "Name shown in briefings and menus." },
     "quickstartDoc": { "type": "string", "minLength": 1, "default": "", "description": "Where `afx brief` points agents for the full guide." },
     "enabledModules": {

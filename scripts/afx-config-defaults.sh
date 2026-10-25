@@ -9,7 +9,7 @@ _afx_config_default() {
     extraOrgs) echo "" ;;
     clonesRootMac) echo "~/afx/clones" ;;
     clonesRootWindows) echo "~/afx/clones" ;;
-    registryFile) echo "~/.afx/allforx-projects.json" ;;
+    registryFile) echo "~/.afx/afx-projects.json" ;;
     brand) echo "AFX CLI" ;;
     quickstartDoc) echo "" ;;
     enabledModules) echo "all" ;;
