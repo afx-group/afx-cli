@@ -57,7 +57,9 @@ run() {
 }
 run "afx help" "0" help
 run "afx doctor" "0 1" doctor
+GS0=""; [ "$WRITE_OK" = 0 ] && GS0="$(cd "$P" && git status --porcelain 2>/dev/null)"
 run "afx init --project (dry run)" "0" init --project
+if [ "$WRITE_OK" = 0 ]; then [ "$GS0" = "$(cd "$P" && git status --porcelain 2>/dev/null)" ] && pass "dry run left the existing repo untouched" || fail "afx init --project changed the existing repo (git status differs)"; fi
 run "afx where (exit 2 = folder not an approved AFX place, by design)" "0 1 2" where
 run "afx license status" "0" license status
 run "afx license check afx_cli:pro (no licence: not entitled)" "1" license check afx_cli:pro
@@ -71,11 +73,11 @@ fi
 
 # 3. parity: README commands vs `afx help`
 "$A" help > "$T/help.txt" 2>&1
-awk '/^```/ {f=!f; next} f && /^afx([ \t]|$)/ {print}' "$ROOT/README.md" | sed 's/[ \t]*#.*$//' | while IFS= read -r line; do
+awk '/^```/ {f=!f; next} f && /^afx([ \t]|$)/ {print}' "$ROOT/README.md" | sed 's/[[:space:]]*#.*$//' | while IFS= read -r line; do
   set -- $line; shift; w1="${1:-}"; w2="${2:-}"
   [ -n "$w1" ] || continue
   case "$w1" in -*) continue ;; esac
-  if grep -q "afx $w1" "$T/help.txt"; then echo "PARITY-OK $line"; else echo "PARITY-MISSING $line"; fi
+  if grep -Eq "afx $w1([^A-Za-z0-9_-]|$)" "$T/help.txt"; then echo "PARITY-OK $line"; else echo "PARITY-MISSING $line"; fi
 done > "$T/parity.txt"
 miss=$(grep -c '^PARITY-MISSING' "$T/parity.txt"); okc=$(grep -c '^PARITY-OK' "$T/parity.txt")
 if [ "$miss" = 0 ]; then pass "README parity: all $okc documented commands are in afx help"; else fail "README parity: $miss documented command(s) not in afx help"; grep '^PARITY-MISSING' "$T/parity.txt" | sed 's/^/        /'; fi
