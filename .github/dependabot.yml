@@ -1,0 +1,39 @@
+# AFX-DEPENDABOT-STANDARD v2 (2026-11-08). Managed by scripts/afx-guard/afx-dependabot-sync.sh in the hub; copy to <repo>/.github/dependabot.yml.
+# One weekly PR for all minor+patch updates (grouped). Major versions are NOT bot PRs: they are listed once a month in a digest issue
+# (scripts/afx-guard/afx-major-digest.mjs; GitHub Actions is off org-wide, so a person or agent runs it monthly) and done as planned, owner-approved work. Why: 25 dependabot PRs (zod 3->4 in every repo) sat open
+# on 2026-11-08 and nobody owned them. Rationale and triage rules: docs/process/DEPENDENCY_UPDATES.md (afx-template).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Framework-coupled majors are planned upgrade work (a Master Sprint item), not a bot PR.
+      # React Native and Expo packages are versioned 0.x or tied to the Expo SDK, so their breaking
+      # releases arrive as "minor" bumps (react-native 0.81 -> 0.87 broke PYP's mobile build): hold minor too.
+      - dependency-name: "expo"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-native"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react-native-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@react-native/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@react-native-community/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
